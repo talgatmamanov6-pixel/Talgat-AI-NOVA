@@ -67,7 +67,7 @@ class Handler(BaseHTTPRequestHandler):
    self.send_response(204);self.send_header("Content-Length","0");self.end_headers();return
   if path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY),"version":"nova-2","review_available":bool(REVIEW_MODEL)})
   if path!="/":return self.respond(404,{"error":"Not found"})
-  data=PAGE.encode();self.send_response(200);self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("X-Content-Type-Options","nosniff");self.send_header("Content-Length",str(len(data)));self.end_headers();self.wfile.write(data)
+  data=open(os.path.join(os.path.dirname(__file__),"hologram.html"),encoding="utf-8").read().encode();self.send_response(200);self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("X-Content-Type-Options","nosniff");self.send_header("Content-Length",str(len(data)));self.end_headers();self.wfile.write(data)
  def do_POST(self):
   path=urlsplit(self.path).path
   if path not in ("/api/chat","/api/nova/think","/api/nova/plan","/api/nova/calculate"):return self.respond(404,{"error":"Not found"})
