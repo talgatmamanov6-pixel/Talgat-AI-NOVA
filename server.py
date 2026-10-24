@@ -1,5 +1,6 @@
 import os,json,time,math,ast,operator,urllib.request,urllib.error,threading
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+from urllib.parse import urlsplit
 from collections import defaultdict,deque
 from urllib.parse import urlparse
 PORT=int(os.environ.get("PORT","10000"))
@@ -52,12 +53,24 @@ class Handler(BaseHTTPRequestHandler):
  def respond(self,status,obj):
   data=json.dumps(obj,ensure_ascii=False).encode()
   self.send_response(status);self.send_header("Content-Type","application/json; charset=utf-8");self.send_header("Cache-Control","no-store");self.send_header("X-Content-Type-Options","nosniff");self.send_header("Content-Length",str(len(data)));self.end_headers();self.wfile.write(data)
+ def do_HEAD(self):
+  p=urlsplit(self.path).path
+  if p in ("/","/api/status","/favicon.ico"):
+   self.send_response(200 if p!="/favicon.ico" else 204)
+   self.send_header("Content-Length","0")
+   self.end_headers()
+  else:
+   self.send_response(404);self.send_header("Content-Length","0");self.end_headers()
  def do_GET(self):
-  if self.path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY),"version":"nova-2","review_available":bool(REVIEW_MODEL)})
-  if self.path!="/":return self.respond(404,{"error":"Not found"})
+  path=urlsplit(self.path).path
+  if path=="/favicon.ico":
+   self.send_response(204);self.send_header("Content-Length","0");self.end_headers();return
+  if path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY),"version":"nova-2","review_available":bool(REVIEW_MODEL)})
+  if path!="/":return self.respond(404,{"error":"Not found"})
   data=PAGE.encode();self.send_response(200);self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("X-Content-Type-Options","nosniff");self.send_header("Content-Length",str(len(data)));self.end_headers();self.wfile.write(data)
  def do_POST(self):
-  if self.path not in ("/api/chat","/api/nova/think","/api/nova/plan","/api/nova/calculate"):return self.respond(404,{"error":"Not found"})
+  path=urlsplit(self.path).path
+  if path not in ("/api/chat","/api/nova/think","/api/nova/plan","/api/nova/calculate"):return self.respond(404,{"error":"Not found"})
   ip=self.client_address[0]
   with LOCK:
    dq=TOKENS[ip];now=time.monotonic()
@@ -69,10 +82,10 @@ class Handler(BaseHTTPRequestHandler):
    if length<1 or length>25000:return self.respond(413,{"error":"Размер запроса превышен"})
    d=json.loads(self.rfile.read(length))
    if not isinstance(d,dict):return self.respond(400,{"error":"Некорректный JSON"})
-   if self.path=="/api/nova/calculate":
+   if path=="/api/nova/calculate":
     try:return self.respond(200,{"result":evaluate(d.get("expression",""))})
     except Exception as e:return self.respond(400,{"error":"Ошибка выражения: "+str(e)})
-   if self.path=="/api/nova/plan":
+   if path=="/api/nova/plan":
     task=d.get("task","")
     if not isinstance(task,str) or not task.strip() or len(task)>6000:return self.respond(400,{"error":"Введите задачу"})
     return self.respond(200,{"steps":plan(task),"goal":task})
@@ -84,10 +97,10 @@ class Handler(BaseHTTPRequestHandler):
     if isinstance(m,dict) and m.get("role") in ("user","assistant") and isinstance(m.get("content"),str):
      context.append({"role":m["role"],"content":m["content"][:2500]})
    sys="Ты Talgat AI NOVA. Пиши на языке пользователя; отвечай точно, отмечай неопределённость, не выдумывай источники и доступные инструменты. Не утверждай, что ты сверхинтеллект или учишься самостоятельно."
-   if self.path=="/api/nova/think":sys+=" Разбери задачу на шаги, проверь логические ошибки и факты, затем дай структурированный практический ответ."
+   if path=="/api/nova/think":sys+=" Разбери задачу на шаги, проверь логические ошибки и факты, затем дай структурированный практический ответ."
    answer=complete([{"role":"system","content":sys}]+context+[{"role":"user","content":question}],MODEL)
    reviewed=False
-   if self.path=="/api/nova/think" and REVIEW_MODEL:
+   if path=="/api/nova/think" and REVIEW_MODEL:
     try:
      check=complete([{"role":"system","content":"Ты редактор-проверяющий: исправь необоснованные выводы и логические ошибки в тексте. Верни только полезный улучшенный ответ."},{"role":"user","content":"Запрос: "+question+"\n\nТекст: "+answer}],REVIEW_MODEL)
      if isinstance(check,str) and check.strip():answer=check;reviewed=True
