@@ -33,6 +33,19 @@ def complete(messages,model):
  with urllib.request.urlopen(req,timeout=48) as r:return json.load(r)["choices"][0]["message"]["content"]
 def plan(task):
  return ["Определить конечную цель, ограничения и критерии успеха","Разделить запрос на независимые проверяемые задачи","Найти доказательства и отметить неопределённости","Составить решение и проверить ошибки","Подготовить практические следующие действия"]
+def offline_answer(q):
+ t=q.lower().strip()
+ if any(x in t for x in ("привет","здравствуй","добрый день")):return "Привет! Я NOVA в автономном режиме. Умею строить планы и считать. Для произвольных ответов нужна подключённая языковая модель."
+ if any(x in t for x in ("что умеешь","помощь","возможност")):return "Без API-ключа доступны: планирование задач, арифметика и голосовое управление браузера. Напиши «план: создать сайт» или «посчитай: (12+4)*3»."
+ if t.startswith(("план:","план ","составь план")):
+  goal=q.split(":",1)[-1].strip() if ":" in q else q
+  return "План по задаче «"+goal[:150]+"»:\\n"+ "\\n".join(str(i+1)+". "+step for i,step in enumerate(plan(goal)))
+ if t.startswith(("посчитай:","вычисли:","считай:")):
+  expr=q.split(":",1)[-1].strip()
+  try:return "Результат: "+str(evaluate(expr))
+  except Exception:return "Не удалось вычислить. Используй числа, скобки, +, -, *, /, %."
+ return "Я работаю без ключа в ограниченном автономном режиме и не стану выдумывать ответ. Могу составить план: напиши «план: "+q[:100]+"». Для полноценной беседы потребуется локальная модель на мощном устройстве или облачный API."
+
 PAGE=r"""<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b1324"><title>Talgat AI NOVA</title><style>
 :root{font-family:system-ui,-apple-system,sans-serif;color:#eaf5ff;background:#090f1e}*{box-sizing:border-box}body{margin:0}main{max-width:850px;margin:auto;min-height:100dvh;display:flex;flex-direction:column;padding:16px}.head{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid #263b54;padding-bottom:14px}h1{font-size:22px;margin:0;color:#8df4ce}.sub{color:#93a9c4;font-size:12px}.mode{background:#18283e;color:#fff;border:1px solid #385371;border-radius:12px;padding:8px}#chat{flex:1;overflow-y:auto;padding:18px 0;min-height:40vh}.bubble{padding:12px 15px;border-radius:15px;margin-bottom:11px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}.me{background:#164c46;margin-left:14%}.ai{background:#19273c;margin-right:8%}.note{color:#a9bdd5;background:#122036;padding:12px;border-radius:12px}footer{position:sticky;bottom:0;background:#090f1e;padding:9px 0 3px}textarea{width:100%;min-height:70px;max-height:160px;resize:vertical;border:1px solid #3b526e;background:#101c2e;border-radius:14px;color:white;padding:12px;font:inherit}button{background:#36c4a5;color:#04211b;border:0;border-radius:12px;padding:11px 15px;font-weight:700;cursor:pointer}button.secondary{background:#1e3047;color:#cfebf5}.tools{display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px}small{color:#829bb6}button:disabled{opacity:.5}</style>
 <main><div class="head"><div><h1>✦ Talgat AI NOVA</h1><div class="sub">Многоэтапный интеллектуальный помощник</div></div><select id="mode" class="mode"><option value="chat">Чат</option><option value="think">Глубокий ответ</option><option value="plan">Планировщик</option><option value="calculate">Калькулятор</option></select></div>
@@ -65,7 +78,7 @@ class Handler(BaseHTTPRequestHandler):
   path=urlsplit(self.path).path
   if path=="/favicon.ico":
    self.send_response(204);self.send_header("Content-Length","0");self.end_headers();return
-  if path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY),"version":"nova-2","review_available":bool(REVIEW_MODEL)})
+  if path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY),"version":"nova-2","review_available":bool(REVIEW_MODEL),"offline_available":True})
   if path!="/":return self.respond(404,{"error":"Not found"})
   data=open(os.path.join(os.path.dirname(__file__),"hologram.html"),encoding="utf-8").read().encode();self.send_response(200);self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("X-Content-Type-Options","nosniff");self.send_header("Content-Length",str(len(data)));self.end_headers();self.wfile.write(data)
  def do_POST(self):
@@ -91,7 +104,7 @@ class Handler(BaseHTTPRequestHandler):
     return self.respond(200,{"steps":plan(task),"goal":task})
    question=d.get("message","")
    if not isinstance(question,str) or not question.strip() or len(question)>6000:return self.respond(400,{"error":"Введите вопрос до 6000 символов"})
-   if not API_KEY:return self.respond(503,{"error":"Чат с нейросетью ещё не подключён. Администратор должен настроить официальный AI API-ключ."})
+   if not API_KEY:return self.respond(200,{"answer":offline_answer(question),"mode":"offline","reviewed":False})
    context=[]
    for m in (d.get("history") if isinstance(d.get("history"),list) else [])[-12:]:
     if isinstance(m,dict) and m.get("role") in ("user","assistant") and isinstance(m.get("content"),str):
