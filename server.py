@@ -119,6 +119,15 @@ class Handler(BaseHTTPRequestHandler):
      if isinstance(check,str) and check.strip():answer=check;reviewed=True
     except Exception:pass
    return self.respond(200,{"answer":answer,"reviewed":reviewed})
-  except urllib.error.HTTPError as e:return self.respond(502,{"error":"Поставщик ИИ вернул HTTP "+str(e.code)})
+  except urllib.error.HTTPError as e:
+   detail=""
+   try:
+    provider_error=json.loads(e.read(2048).decode("utf-8","replace"))
+    if isinstance(provider_error,dict):
+     item=provider_error.get("error",{})
+     if isinstance(item,dict):detail=str(item.get("message",""))[:350]
+   except Exception:pass
+   if API_KEY:detail=detail.replace(API_KEY,"[REDACTED]")
+   return self.respond(502,{"error":"Поставщик ИИ вернул HTTP "+str(e.code),"provider_message":detail,"provider":"groq" if "api.groq.com" in BASE else "custom"})
   except Exception:return self.respond(500,{"error":"Не удалось обработать запрос"})
 if __name__=="__main__":ThreadingHTTPServer(("0.0.0.0",PORT),Handler).serve_forever()
