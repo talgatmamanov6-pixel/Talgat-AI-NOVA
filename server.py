@@ -4,9 +4,9 @@ from urllib.parse import urlsplit
 from collections import defaultdict,deque
 from urllib.parse import urlparse
 PORT=int(os.environ.get("PORT","10000"))
-API_KEY=os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY","")
-MODEL=os.environ.get("AI_MODEL") or os.environ.get("OPENAI_MODEL","gpt-4.1-mini")
-BASE=(os.environ.get("AI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+API_KEY=os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY","")
+MODEL=os.environ.get("AI_MODEL") or os.environ.get("OPENAI_MODEL") or ("llama-3.3-70b-versatile" if os.environ.get("GROQ_API_KEY") and not (os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY")) else "gpt-4.1-mini")
+BASE=(os.environ.get("AI_BASE_URL") or ("https://api.groq.com/openai/v1" if os.environ.get("GROQ_API_KEY") and not (os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY")) else "https://api.openai.com/v1")).rstrip("/")
 REVIEW_MODEL=os.environ.get("AI_REVIEW_MODEL","")
 MAX_TOKENS=int(os.environ.get("AI_MAX_TOKENS","1300"))
 TOKENS=defaultdict(deque)
@@ -78,7 +78,7 @@ class Handler(BaseHTTPRequestHandler):
   path=urlsplit(self.path).path
   if path=="/favicon.ico":
    self.send_response(204);self.send_header("Content-Length","0");self.end_headers();return
-  if path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY),"version":"nova-2","review_available":bool(REVIEW_MODEL),"offline_available":True})
+  if path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY),"version":"nova-2","review_available":bool(REVIEW_MODEL),"offline_available":True,"provider":"groq" if "api.groq.com" in BASE else "custom" if BASE!="https://api.openai.com/v1" else "openai"})
   if path!="/":return self.respond(404,{"error":"Not found"})
   data=open(os.path.join(os.path.dirname(__file__),"hologram.html"),encoding="utf-8").read().encode();self.send_response(200);self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("X-Content-Type-Options","nosniff");self.send_header("Content-Length",str(len(data)));self.end_headers();self.wfile.write(data)
  def do_POST(self):
