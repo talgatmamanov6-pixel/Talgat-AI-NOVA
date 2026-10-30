@@ -52,7 +52,7 @@ def plan(task):
  return ["Определить конечную цель, ограничения и критерии успеха","Разделить запрос на независимые проверяемые задачи","Найти доказательства и отметить неопределённости","Составить решение и проверить ошибки","Подготовить практические следующие действия"]
 def offline_answer(q):
  t=q.lower().strip()
- if any(x in t for x in ("привет","здравствуй","добрый день","салам","сәлем","ассаламу","алейкум")):return "Привет! Я NOVA в автономном режиме. Умею строить планы и считать. Для произвольных ответов нужна подключённая языковая модель."
+ if any(x in t for x in ("что умеешь","помощь","возможност")):return "Я NOVA. Сейчас доступны голосовой ввод и озвучивание в браузере, планирование задач и вычисления. Полноценный диалог с языковой моделью пока недоступен из-за ошибки облачного провайдера."\n if any(x in t for x in ("привет","здравствуй","добрый день","салам","сәлем","ассаламу","алейкум")):return "Привет! Я NOVA. Сейчас могу составлять планы и выполнять расчёты. Облачная языковая модель пока недоступна."
  if any(x in t for x in ("что умеешь","помощь","возможност")):return "Без API-ключа доступны: планирование задач, арифметика и голосовое управление браузера. Напиши «план: создать сайт» или «посчитай: (12+4)*3»."
  if t.startswith(("план:","план ","составь план")):
   goal=q.split(":",1)[-1].strip() if ":" in q else q
@@ -137,15 +137,6 @@ class Handler(BaseHTTPRequestHandler):
     except Exception:pass
    return self.respond(200,{"answer":answer,"mode":"online","reviewed":reviewed})
   except urllib.error.HTTPError as e:
-   detail=""
-   try:
-    provider_error=json.loads(e.read(2048).decode("utf-8","replace"))
-    if isinstance(provider_error,dict):
-     item=provider_error.get("error",{})
-     if isinstance(item,dict):detail=str(item.get("message",""))[:350]
-   except Exception:pass
-   for secret in (API_KEY,os.environ.get("OPENROUTER_API_KEY","")):
-    if secret:detail=detail.replace(secret,"[REDACTED]")
-   return self.respond(502,{"error":"Поставщик ИИ вернул HTTP "+str(e.code),"provider_message":detail,"provider":"groq" if "api.groq.com" in BASE else "custom"})
-  except Exception:return self.respond(500,{"error":"Не удалось обработать запрос"})
+   return self.respond(200,{"answer":offline_answer(question),"mode":"offline","provider_error_code":e.code,"notice":"Облачный ИИ недоступен. Используется ограниченный автономный режим."})
+  except Exception:return self.respond(200,{"answer":offline_answer(question),"mode":"offline","notice":"Облачный ИИ временно недоступен. Используется ограниченный автономный режим."})
 if __name__=="__main__":ThreadingHTTPServer(("0.0.0.0",PORT),Handler).serve_forever()
