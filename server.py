@@ -29,8 +29,22 @@ def evaluate(value):
  return calc(ast.parse(value,mode="eval").body)
 def complete(messages,model):
  data=json.dumps({"model":model,"messages":messages,"temperature":0.3,"max_tokens":MAX_TOKENS}).encode()
- req=urllib.request.Request(BASE+"/chat/completions",data=data,headers={"Authorization":"Bearer "+API_KEY,"Content-Type":"application/json"})
- with urllib.request.urlopen(req,timeout=48) as r:return json.load(r)["choices"][0]["message"]["content"]
+ routes=[(BASE,API_KEY,model)]
+ router_key=os.environ.get("OPENROUTER_API_KEY","")
+ if router_key and "openrouter.ai" not in BASE:
+  routes.append(("https://openrouter.ai/api/v1",router_key,os.environ.get("OPENROUTER_MODEL","openrouter/free")))
+ last_error=None
+ for base,key,selected_model in routes:
+  payload=json.dumps({"model":selected_model,"messages":messages,"temperature":0.3,"max_tokens":MAX_TOKENS}).encode()
+  req=urllib.request.Request(base+"/chat/completions",data=payload,headers={"Authorization":"Bearer "+key,"Content-Type":"application/json"})
+  try:
+   with urllib.request.urlopen(req,timeout=48) as response:return json.load(response)["choices"][0]["message"]["content"]
+  except urllib.error.HTTPError as exc:
+   last_error=exc
+   if exc.code not in (401,403,404,429,500,502,503):raise
+  except (urllib.error.URLError,TimeoutError) as exc:last_error=exc
+ if last_error:raise last_error
+ raise RuntimeError("No AI provider configured")
 def plan(task):
  return ["Определить конечную цель, ограничения и критерии успеха","Разделить запрос на независимые проверяемые задачи","Найти доказательства и отметить неопределённости","Составить решение и проверить ошибки","Подготовить практические следующие действия"]
 def offline_answer(q):
@@ -78,7 +92,7 @@ class Handler(BaseHTTPRequestHandler):
   path=urlsplit(self.path).path
   if path=="/favicon.ico":
    self.send_response(204);self.send_header("Content-Length","0");self.end_headers();return
-  if path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY),"version":"nova-2","review_available":bool(REVIEW_MODEL),"offline_available":True,"provider":"groq" if "api.groq.com" in BASE else "custom" if BASE!="https://api.openai.com/v1" else "openai"})
+  if path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY or os.environ.get("OPENROUTER_API_KEY")),"version":"nova-2","review_available":bool(REVIEW_MODEL),"offline_available":True,"provider":"groq" if "api.groq.com" in BASE else "custom" if BASE!="https://api.openai.com/v1" else "openai"})
   if path!="/":return self.respond(404,{"error":"Not found"})
   data=open(os.path.join(os.path.dirname(__file__),"hologram.html"),encoding="utf-8").read().encode();self.send_response(200);self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("X-Content-Type-Options","nosniff");self.send_header("Content-Length",str(len(data)));self.end_headers();self.wfile.write(data)
  def do_POST(self):
@@ -104,7 +118,7 @@ class Handler(BaseHTTPRequestHandler):
     return self.respond(200,{"steps":plan(task),"goal":task})
    question=d.get("message","")
    if not isinstance(question,str) or not question.strip() or len(question)>6000:return self.respond(400,{"error":"Введите вопрос до 6000 символов"})
-   if not API_KEY:return self.respond(200,{"answer":offline_answer(question),"mode":"offline","reviewed":False})
+   if not (API_KEY or os.environ.get("OPENROUTER_API_KEY")):return self.respond(200,{"answer":offline_answer(question),"mode":"offline","reviewed":False})
    context=[]
    for m in (d.get("history") if isinstance(d.get("history"),list) else [])[-12:]:
     if isinstance(m,dict) and m.get("role") in ("user","assistant") and isinstance(m.get("content"),str):
