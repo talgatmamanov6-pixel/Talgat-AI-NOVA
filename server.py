@@ -29,8 +29,11 @@ def evaluate(value):
  return calc(ast.parse(value,mode="eval").body)
 def complete(messages,model):
  data=json.dumps({"model":model,"messages":messages,"temperature":0.3,"max_tokens":MAX_TOKENS}).encode()
- routes=[(BASE,API_KEY,model)]
  router_key=os.environ.get("OPENROUTER_API_KEY","")
+ routes=[]
+ if "openrouter.ai" in BASE:
+  if router_key or API_KEY:routes.append((BASE,router_key or API_KEY,os.environ.get("OPENROUTER_MODEL",model)))
+ elif API_KEY:routes.append((BASE,API_KEY,model))
  if router_key and "openrouter.ai" not in BASE:
   routes.append(("https://openrouter.ai/api/v1",router_key,os.environ.get("OPENROUTER_MODEL","openrouter/free")))
  last_error=None
@@ -92,7 +95,7 @@ class Handler(BaseHTTPRequestHandler):
   path=urlsplit(self.path).path
   if path=="/favicon.ico":
    self.send_response(204);self.send_header("Content-Length","0");self.end_headers();return
-  if path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY or os.environ.get("OPENROUTER_API_KEY")),"version":"nova-2","review_available":bool(REVIEW_MODEL),"offline_available":True,"provider":"groq" if "api.groq.com" in BASE else "custom" if BASE!="https://api.openai.com/v1" else "openai"})
+  if path=="/api/status":return self.respond(200,{"ok":True,"ai_configured":bool(API_KEY or os.environ.get("OPENROUTER_API_KEY")),"version":"nova-2","review_available":bool(REVIEW_MODEL),"offline_available":True,"provider_verified":False,"openrouter_fallback_configured":bool(os.environ.get("OPENROUTER_API_KEY")),"provider":"groq" if "api.groq.com" in BASE else "custom" if BASE!="https://api.openai.com/v1" else "openai"})
   if path!="/":return self.respond(404,{"error":"Not found"})
   data=open(os.path.join(os.path.dirname(__file__),"hologram.html"),encoding="utf-8").read().encode();self.send_response(200);self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("X-Content-Type-Options","nosniff");self.send_header("Content-Length",str(len(data)));self.end_headers();self.wfile.write(data)
  def do_POST(self):
@@ -132,7 +135,7 @@ class Handler(BaseHTTPRequestHandler):
      check=complete([{"role":"system","content":"Ты редактор-проверяющий: исправь необоснованные выводы и логические ошибки в тексте. Верни только полезный улучшенный ответ."},{"role":"user","content":"Запрос: "+question+"\n\nТекст: "+answer}],REVIEW_MODEL)
      if isinstance(check,str) and check.strip():answer=check;reviewed=True
     except Exception:pass
-   return self.respond(200,{"answer":answer,"reviewed":reviewed})
+   return self.respond(200,{"answer":answer,"mode":"online","reviewed":reviewed})
   except urllib.error.HTTPError as e:
    detail=""
    try:
@@ -141,7 +144,8 @@ class Handler(BaseHTTPRequestHandler):
      item=provider_error.get("error",{})
      if isinstance(item,dict):detail=str(item.get("message",""))[:350]
    except Exception:pass
-   if API_KEY:detail=detail.replace(API_KEY,"[REDACTED]")
+   for secret in (API_KEY,os.environ.get("OPENROUTER_API_KEY","")):
+    if secret:detail=detail.replace(secret,"[REDACTED]")
    return self.respond(502,{"error":"Поставщик ИИ вернул HTTP "+str(e.code),"provider_message":detail,"provider":"groq" if "api.groq.com" in BASE else "custom"})
   except Exception:return self.respond(500,{"error":"Не удалось обработать запрос"})
 if __name__=="__main__":ThreadingHTTPServer(("0.0.0.0",PORT),Handler).serve_forever()
