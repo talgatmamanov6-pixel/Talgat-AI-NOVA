@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 from collections import defaultdict,deque
 from urllib.parse import urlparse
 PORT=int(os.environ.get("PORT","10000"))
-API_KEY=os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY","")
+API_KEY=os.environ.get("GROQ_API_KEY") or os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY","")
 MODEL=os.environ.get("AI_MODEL") or os.environ.get("OPENAI_MODEL") or ("llama-3.3-70b-versatile" if os.environ.get("GROQ_API_KEY") and not (os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY")) else "gpt-4.1-mini")
 BASE=(os.environ.get("AI_BASE_URL") or ("https://api.groq.com/openai/v1" if os.environ.get("GROQ_API_KEY") and not (os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY")) else "https://api.openai.com/v1")).rstrip("/")
 REVIEW_MODEL=os.environ.get("AI_REVIEW_MODEL","")
