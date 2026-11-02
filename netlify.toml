@@ -1,7 +1,6 @@
 [build]
   publish = "web"
   functions = "netlify/functions"
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
+
+# API routes are defined by netlify/functions/api.mjs config.
+# Avoid a redirect to a nonexistent /.netlify/functions/api/* path.
