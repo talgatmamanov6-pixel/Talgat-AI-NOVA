@@ -1,5 +1,12 @@
 package kz.talgat.nova;
 import android.app.Activity;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.content.Intent;
+import android.net.Uri;
+import android.webkit.WebChromeClient;
+import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
 import android.os.Bundle;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -20,6 +27,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 public class MainActivity extends Activity {
  private WebView web;
+ private ValueCallback<Uri[]> fileCallback;
+ private PermissionRequest audioRequest;
+ private static final int FILE_PICKER=1201;
+ private static final int AUDIO_PERMISSION=1202;
  private static final String SITE="https://talgat-ai.netlify.app/";
  @Override public void onCreate(Bundle b) {
   super.onCreate(b);
@@ -30,6 +41,32 @@ public class MainActivity extends Activity {
   web.getSettings().setMediaPlaybackRequiresUserGesture(false);
   web.getSettings().setAllowFileAccess(false);
   web.getSettings().setAllowContentAccess(false);
+  web.setWebChromeClient(new WebChromeClient() {
+   @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+    if(fileCallback!=null)fileCallback.onReceiveValue(null);
+    fileCallback=callback;
+    try {
+     Intent intent=params.createIntent();
+     startActivityForResult(intent,FILE_PICKER);
+     return true;
+    }catch(Exception e){fileCallback=null;return false;}
+   }
+   @Override public void onPermissionRequest(PermissionRequest request) {
+    runOnUiThread(()->{
+     Uri origin=request.getOrigin();
+     if(origin==null||!"https".equals(origin.getScheme())||!"talgat-ai.netlify.app".equals(origin.getHost())){
+      request.deny();return;
+     }
+     boolean audio=false;
+     for(String resource:request.getResources())if(PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource))audio=true;
+     if(!audio){request.deny();return;}
+     audioRequest=request;
+     if(android.os.Build.VERSION.SDK_INT>=23&&checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+      requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},AUDIO_PERMISSION);
+     }else request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+    });
+   }
+  });
   web.setWebViewClient(new WebViewClient() {
    @Override public void onPageFinished(WebView view, String url) {
     super.onPageFinished(view,url);
@@ -101,6 +138,22 @@ public class MainActivity extends Activity {
   view.setText(result.toString());view.setTextSize(15);view.setPadding(24,20,24,20);
   scroll.addView(view);
   new AlertDialog.Builder(this).setTitle("Материалы — результаты поиска").setView(scroll).setPositiveButton("Закрыть",null).show();
+ }
+ @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+  super.onActivityResult(requestCode,resultCode,data);
+  if(requestCode==FILE_PICKER&&fileCallback!=null){
+   fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode,data));
+   fileCallback=null;
+  }
+ }
+ @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){
+  super.onRequestPermissionsResult(requestCode,permissions,grantResults);
+  if(requestCode==AUDIO_PERMISSION&&audioRequest!=null){
+   if(grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED)
+    audioRequest.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+   else audioRequest.deny();
+   audioRequest=null;
+  }
  }
  @Override public void onBackPressed(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
 }
