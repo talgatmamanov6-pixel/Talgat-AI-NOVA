@@ -31,6 +31,19 @@ public class MainActivity extends Activity {
   web.getSettings().setAllowFileAccess(false);
   web.getSettings().setAllowContentAccess(false);
   web.setWebViewClient(new WebViewClient() {
+   @Override public void onPageFinished(WebView view, String url) {
+    super.onPageFinished(view,url);
+    if(!url.startsWith(SITE))return;
+    try {
+     InputStream stream=getAssets().open("nova_visual.js");
+     ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+     byte[] buffer=new byte[4096];int n;
+     while((n=stream.read(buffer))!=-1)bytes.write(buffer,0,n);
+     stream.close();
+     view.evaluateJavascript(new String(bytes.toByteArray(),StandardCharsets.UTF_8),null);
+    }catch(Exception ignored){}
+   }
+
    @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
     String url=request.getUrl().toString();
     if(url.startsWith(SITE)) return false;
