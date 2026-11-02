@@ -1,0 +1,15 @@
+(function(){if(window.__novaVisualInstalled)return;window.__novaVisualInstalled=true;
+const style=document.createElement('style');style.textContent=`
+#nova-thinking{position:fixed;z-index:2147483640;left:50%;top:45%;transform:translate(-50%,-50%);width:158px;height:176px;pointer-events:none;display:none;filter:drop-shadow(0 0 20px #21e9ff66)}
+#nova-thinking.active{display:block}#nova-thinking svg{width:158px;height:158px;overflow:visible}
+#nova-thinking .orbit{transform-origin:80px 80px;animation:nova-spin 3.6s linear infinite}
+#nova-thinking .orbit.reverse{animation-direction:reverse;animation-duration:5s}
+#nova-thinking .pulse{animation:nova-pulse 1.3s ease-in-out infinite alternate}
+#nova-thinking .label{color:#a9faff;text-align:center;font:600 13px sans-serif;letter-spacing:2px;text-shadow:0 0 10px #00d9ff}
+@keyframes nova-spin{to{transform:rotate(360deg)}}@keyframes nova-pulse{to{opacity:.3;transform:scale(.85)}}
+`;document.head.appendChild(style);
+const el=document.createElement('div');el.id='nova-thinking';el.setAttribute('aria-label','ИИ обрабатывает запрос');el.innerHTML=`<svg viewBox="0 0 160 160" aria-hidden="true"><defs><radialGradient id="nova-glow"><stop stop-color="#5cefff"/><stop offset="1" stop-color="#183e95"/></radialGradient></defs><circle cx="80" cy="80" r="53" fill="none" stroke="#1bc6ef" stroke-width="1" opacity=".25"/><g class="orbit" fill="none" stroke="#35f1ff" stroke-width="1.5"><ellipse cx="80" cy="80" rx="56" ry="22" transform="rotate(30 80 80)"/><ellipse cx="80" cy="80" rx="56" ry="22" transform="rotate(90 80 80)"/><ellipse cx="80" cy="80" rx="56" ry="22" transform="rotate(150 80 80)"/></g><g class="orbit reverse" fill="none" stroke="#748bff" stroke-width="1.3"><ellipse cx="80" cy="80" rx="40" ry="50"/><ellipse cx="80" cy="80" rx="50" ry="40"/></g><circle class="pulse" cx="80" cy="80" r="16" fill="url(#nova-glow)"/><circle cx="80" cy="80" r="5" fill="#ffffff"/></svg><div class="label">NOVA ДУМАЕТ</div>`;document.body.appendChild(el);
+let count=0;const show=()=>{count++;el.classList.add('active')};const hide=()=>{count=Math.max(0,count-1);if(!count)el.classList.remove('active')};
+const originalFetch=window.fetch;window.fetch=function(input,init){let url=typeof input==='string'?input:input&&input.url||'';let isChat=/\/api\/(chat|nova-chat)(?:[?#]|$)/.test(url)||/\.netlify\/functions\/(chat|nova-chat)/.test(url);if(isChat)show();return originalFetch.apply(this,arguments).then(r=>{if(isChat)hide();return r},e=>{if(isChat)hide();throw e})};
+const OriginalXHR=window.XMLHttpRequest;const open=OriginalXHR.prototype.open;const send=OriginalXHR.prototype.send;OriginalXHR.prototype.open=function(method,url){this.__novaChat=/\/api\/(chat|nova-chat)(?:[?#]|$)/.test(String(url));return open.apply(this,arguments)};OriginalXHR.prototype.send=function(){if(this.__novaChat){show();this.addEventListener('loadend',hide,{once:true})}return send.apply(this,arguments)};
+})();
