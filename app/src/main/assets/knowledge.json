@@ -1,0 +1,14 @@
+[
+  {
+    "source": "ARCHITECTURE_RU.md",
+    "text": "Архитектура Talgat AI 5.0 SELF-HOSTED: пользователь → Caddy HTTPS → Talgat AI Node API → PostgreSQL. AI Provider Router направляет запросы к локальному vLLM или внешним API. Компоненты: frontend/PWA, API-сервер, аккаунты и сессии, история чатов, проекты и память, квоты, зашифрованные настройки провайдеров, PostgreSQL, HTTPS reverse proxy, резервные копии, обновление и восстановление. Локальная модель может работать через vLLM; OpenAI, Google и ElevenLabs — опциональные адаптеры."
+  },
+  {
+    "source": "SERVER_SETUP_RU.md",
+    "text": "Для самостоятельной установки Talgat AI 5.0 нужен Linux-сервер с Docker и Docker Compose. Для локальной большой модели требуется GPU-сервер. HTTPS настраивается Caddy. Команды: ./scripts/bootstrap.sh, docker compose up -d --build, ./scripts/update.sh, ./scripts/backup.sh, ./scripts/restore.sh, ./scripts/logs.sh. Для локального текстового ИИ настроить LOCAL_LLM_MODEL и compose.local-ai.yaml с vLLM."
+  },
+  {
+    "source": "index(3).html",
+    "text": "Интерфейс Talgat AI Ultimate 4.4 MEDIA QA содержит режимы Авто, Универсальный, MAX, веб-поиск, Deep Research, Code/Data, Agent/Work, Наука, Изобретатель, Инженер, Программист, Финансы, Прогноз, Библиотека, Media Lab, Совет ИИ. Предусмотрены инструменты изображений, видео, музыки, голосовой студии, Live Voice, транскрибации, файлов, поиска, исследований, вычислений, памяти и проектов. Наличие кнопки или режима не подтверждает работу серверной функции."
+  }
+]
