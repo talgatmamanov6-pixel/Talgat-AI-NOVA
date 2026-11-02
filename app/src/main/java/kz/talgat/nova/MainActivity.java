@@ -6,13 +6,22 @@ import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceError;
 import android.graphics.Color;
+import android.app.AlertDialog;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.EditText;
+import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.LinearLayout;
-import android.view.View;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 public class MainActivity extends Activity {
  private WebView web;
- private static final String SITE = "https://talgat-ai.netlify.app/";
- @Override public void onCreate(Bundle b){
+ private static final String SITE="https://talgat-ai.netlify.app/";
+ @Override public void onCreate(Bundle b) {
   super.onCreate(b);
   web=new WebView(this);
   web.setBackgroundColor(Color.rgb(7,16,30));
@@ -21,21 +30,64 @@ public class MainActivity extends Activity {
   web.getSettings().setMediaPlaybackRequiresUserGesture(false);
   web.getSettings().setAllowFileAccess(false);
   web.getSettings().setAllowContentAccess(false);
-  web.setWebViewClient(new WebViewClient(){
-   @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request){
+  web.setWebViewClient(new WebViewClient() {
+   @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
     String url=request.getUrl().toString();
-    if(url.startsWith("https://talgat-ai.netlify.app/")) return false;
-    if(url.startsWith("https://")) {startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,request.getUrl()));}
+    if(url.startsWith(SITE)) return false;
+    if(url.startsWith("https://")) startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,request.getUrl()));
     return true;
    }
-   @Override public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err){
-    if(req.isForMainFrame()) {
-      view.loadDataWithBaseURL(null,"<html><meta name='viewport' content='width=device-width,initial-scale=1'><body style='background:#07101e;color:white;font:18px sans-serif;padding:24px'><h2>TALGAT AI NOVA</h2><p>Не удалось подключиться к Talgat AI. Проверьте интернет и попробуйте ещё раз.</p><a style='color:#7ceaff' href='https://talgat-ai.netlify.app/'>Повторить подключение</a></body></html>","text/html","UTF-8",null);
-    }
+   @Override public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
+    if(req.isForMainFrame()) view.loadDataWithBaseURL(null,"<html><meta name='viewport' content='width=device-width,initial-scale=1'><body style='background:#07101e;color:white;font:18px sans-serif;padding:24px'><h2>TALGAT AI NOVA</h2><p>Нет подключения к серверу. Проверьте интернет.</p></body></html>","text/html","UTF-8",null);
    }
   });
   setContentView(web);
   web.loadUrl(SITE);
+ }
+ @Override public boolean onCreateOptionsMenu(Menu menu) {
+  menu.add(0,1,0,"База знаний (офлайн)");
+  menu.add(0,2,1,"Обновить чат");
+  return true;
+ }
+ @Override public boolean onOptionsItemSelected(MenuItem item) {
+  if(item.getItemId()==1){openKnowledge();return true;}
+  if(item.getItemId()==2){web.loadUrl(SITE);return true;}
+  return super.onOptionsItemSelected(item);
+ }
+ private void openKnowledge() {
+  final EditText input=new EditText(this);
+  input.setSingleLine(false);
+  input.setHint("Например: локальная модель, память, Docker");
+  new AlertDialog.Builder(this).setTitle("Поиск по материалам TALGAT AI").setView(input)
+   .setPositiveButton("Найти",(dialog,which)->showResults(input.getText().toString()))
+   .setNegativeButton("Отмена",null).show();
+ }
+ private void showResults(String query) {
+  StringBuilder result=new StringBuilder();
+  try {
+   InputStream stream=getAssets().open("knowledge.json");
+   ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+   byte[] buffer=new byte[4096]; int count;
+   while((count=stream.read(buffer))!=-1)bytes.write(buffer,0,count);
+   stream.close();
+   JSONArray docs=new JSONArray(new String(bytes.toByteArray(),StandardCharsets.UTF_8));
+   String[] terms=query.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+");
+   int found=0;
+   for(int i=0;i<docs.length();i++){
+    JSONObject doc=docs.getJSONObject(i);
+    String text=doc.getString("text");
+    String lower=text.toLowerCase(Locale.ROOT);
+    int hits=0;
+    for(String term:terms)if(term.length()>2&&lower.contains(term))hits++;
+    if(hits>0){found++;result.append("Источник: ").append(doc.getString("source")).append("\n").append(text).append("\n\n");}
+   }
+   if(found==0)result.append("В локальной базе совпадений нет. Это не означает, что модель обучена на данном вопросе.");
+  }catch(Exception e){result.append("Ошибка чтения базы знаний: ").append(e.getMessage());}
+  ScrollView scroll=new ScrollView(this);
+  TextView view=new TextView(this);
+  view.setText(result.toString());view.setTextSize(15);view.setPadding(24,20,24,20);
+  scroll.addView(view);
+  new AlertDialog.Builder(this).setTitle("Материалы — результаты поиска").setView(scroll).setPositiveButton("Закрыть",null).show();
  }
  @Override public void onBackPressed(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
 }
