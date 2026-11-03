@@ -40,7 +40,7 @@ export default async function handler(request){
   if(search){
     messages[0].content+=" Используй веб-поиск для проверки источников. Для школьной программы Казахстана ищи по предмету, классу, названию и изданию учебника. Предпочитай официальные порталы Казахстана и издателей. Дай ссылки на использованные страницы. Если конкретное издание не найдено, скажи об этом прямо.";
   }
-  const model=image?"meta-llama/llama-4-scout-17b-16e-instruct":search?"groq/compound-mini":getEnv("GROQ_MODEL")||"openai/gpt-oss-120b";
+  const model=image?"qwen/qwen3.8-27b":search?"openai/gpt-oss-120b":getEnv("GROQ_MODEL")||"openai/gpt-oss-120b";
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),25000);
   try{
@@ -49,7 +49,7 @@ export default async function handler(request){
       headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
       body:JSON.stringify({
         model,max_completion_tokens:4096,temperature:0.4,
-        ...(search?{compound_custom:{tools:{enabled_tools:["web_search"]}}}:{}),
+        ...(search?{tools:[{type:"browser_search"}],tool_choice:"required"}:{}),
         messages
       })
     });
