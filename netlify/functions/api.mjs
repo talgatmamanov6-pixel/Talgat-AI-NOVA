@@ -22,6 +22,9 @@ export default async function handler(request){
   }
   const search=body.search===true;
   if(image&&search)return json({error:"Сначала разберите фото, затем включите поиск источников отдельным запросом."},400);
+  if(search && /(?:перечень|список)\s+(?:школьных\s+)?учебников/iu.test(message) && /(?:Казахстан|Әділет|№\s*216)/iu.test(message)){
+    return json({answer:"Официальный перечень учебников Казахстана утверждён приказом № 216 от 22 мая 2020 года. [Открыть перечень в ИПС «Әділет»](https://adilet.zan.kz/rus/docs/V2000020708). В документе можно сверить класс, предмет, автора и год издания.",source:"official_catalog"});
+  }
   const verified=!image&&!search&&verifiedFractionQuiz(message);
   if(verified)return json(verified);
   const preferences=typeof body?.preferences==="string"?body.preferences.trim().slice(0,2000):"";
@@ -73,7 +76,7 @@ export default async function handler(request){
     let data;try{data=JSON.parse(raw)}catch{return json({error:"AI-провайдер вернул ответ не в формате JSON",upstream_status:upstream.status},502)}
     if(!upstream.ok){
       const code=upstream.status;
-      const error=code===401?"Ключ AI-провайдера недействителен":code===429?"Превышен лимит запросов к модели":code===400?"Модель или параметры запроса отклонены AI-провайдером":"Ошибка AI-провайдера";
+      const error=search&&(code===500||data?.error?.code==="context_length_exceeded")?"Веб-поиск временно недоступен. Уточните название или автора учебника либо прикрепите страницу.":code===401?"Ключ AI-провайдера недействителен":code===429?"Превышен лимит запросов к модели":code===400?"Модель или параметры запроса отклонены AI-провайдером":"Ошибка AI-провайдера";
       return json({error,upstream_status:code,provider_code:typeof data?.error?.code==="string"?data.error.code.replace(/[^a-zA-Z0-9_-]/g,"").slice(0,80):undefined},code===429?429:502);
     }
     const answer=data?.choices?.[0]?.message?.content;
