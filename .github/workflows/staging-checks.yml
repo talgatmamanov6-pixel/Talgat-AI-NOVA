@@ -1,0 +1,27 @@
+name: Talgat AI staging checks
+on:
+  push:
+    branches: [talgat-ai-2-staging]
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check netlify/functions/api.mjs
+          node --check web/app.js
+      - name: Test API behavior (mocked Groq)
+        run: node --test tests/api.test.mjs
+      - name: Verify PWA files
+        run: |
+          test -s web/index.html
+          test -s web/manifest.webmanifest
+          test -s web/icon.svg
+          node -e "JSON.parse(require('fs').readFileSync('web/manifest.webmanifest','utf8'))"
