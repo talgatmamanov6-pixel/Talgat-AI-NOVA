@@ -59,8 +59,10 @@ async function check(){
   }catch(e){if(idle())$("status").textContent="● API недоступен: "+e.message}
 }
 check();
-let neuralVoice=null,neuralConfigured=false,outputToken=0,outputActive=false;
-async function checkNeural(){try{const r=await fetch("/api/speech",{cache:"no-store"});const d=await r.json();neuralConfigured=r.ok&&d.configured===true;const option=$("speech-engine").querySelector?.("option[value=neural]");if(option)option.disabled=!neuralConfigured;$("neural-status").textContent=neuralConfigured?"Ключ нейронного голоса задан · Cedar":"Нейронный голос: требуется подключение сервиса"}catch{$("neural-status").textContent="Не удалось проверить нейронную озвучку"}}
+let neuralVoice=null,neuralConfigured=false,fishConfigured=false,outputToken=0,outputActive=false;
+async function checkNeural(){try{const r=await fetch("/api/speech",{cache:"no-store"});const d=await r.json();neuralConfigured=r.ok&&d.providers?.openai?.configured===true;fishConfigured=r.ok&&d.providers?.fish?.configured===true;for(const [value,configured] of [['neural',neuralConfigured],['fish',fishConfigured]]){const option=$("speech-engine").querySelector?.('option[value='+value+']');if(option)option.disabled=!configured}$("neural-status").textContent='Fish Audio: '+(fishConfigured?'настроен':'не подключён')+' · OpenAI: '+(neuralConfigured?'настроен':'не подключён')}catch{$("neural-status").textContent="Не удалось проверить нейронную озвучку"}}
+function cloudVoice(){return prefs.engine==='neural'||prefs.engine==='fish'}
+function voiceReady(){return prefs.engine==='fish'?fishConfigured:neuralConfigured}
 checkNeural();
 function stopOutput(){outputToken++;outputActive=false;neuralVoice?.stop();window.speechSynthesis?.cancel?.()}
 function stopCapture(){recordingToken++;recognition?.abort?.();recognition=null;voiceController?.abort();voiceController=null}
@@ -70,11 +72,11 @@ function say(source){
   stopOutput();
   const token=outputToken;
   const text=source.replace(/```[\s\S]*?```/g," Фрагмент кода на экране. ").replace(/\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\s)[^$\n]+?\$/g," Формула на экране. ").replace(/\[([^\]]+)\]\([^)]+\)/g,"$1").replace(/[`*_#~]/g," ").slice(0,4000);
-  if(prefs.engine==='neural'){
-    if(!neuralConfigured){stopVoiceSession();$("status").textContent="Нейронный голос ещё не подключён. Откройте настройки голоса.";return}
+  if(cloudVoice()){
+    if(!voiceReady()){stopVoiceSession();$("status").textContent="Нейронный голос ещё не подключён. Откройте настройки голоса.";return}
     outputActive=true;
-    if(!neuralVoice)neuralVoice=new TalgatNeural.NeuralVoice({fetch:(...args)=>fetch(...args),Audio:window.Audio,createURL:blob=>URL.createObjectURL(blob),revokeURL:url=>URL.revokeObjectURL(url),onState:state=>{document.body.dataset.state=state==='preparing'?'thinking':'speaking';$("status").textContent=state==='preparing'?"Готовлю голосовой ответ…":"Отвечаю · нейронный голос"},onEnd:()=>{outputActive=false;document.body.dataset.state='idle';if(voiceSession)startListening();else check()},onError:e=>{outputActive=false;stopVoiceSession();$("status").textContent=e.message}});
-    neuralVoice.speak(text,prefs.language||'ru',Number($("voice-rate").value)||1);return;
+    if(!neuralVoice)neuralVoice=new TalgatNeural.NeuralVoice({lowLatency:true,fetch:(...args)=>fetch(...args),Audio:window.Audio,createURL:blob=>URL.createObjectURL(blob),revokeURL:url=>URL.revokeObjectURL(url),onState:state=>{document.body.dataset.state=state==='preparing'?'thinking':'speaking';$("status").textContent=state==='preparing'?"Готовлю голосовой ответ…":"Отвечаю · нейронный голос"},onEnd:()=>{outputActive=false;document.body.dataset.state='idle';if(voiceSession)startListening();else check()},onError:e=>{outputActive=false;stopVoiceSession();$("status").textContent=e.message}});
+    neuralVoice.speak(text,prefs.language||'ru',Number($("voice-rate").value)||1,prefs.engine==='fish'?'fish':'openai');return;
   }
   if(!('speechSynthesis' in window)){$("status").textContent="Голос устройства недоступен.";return}
   outputActive=true;
@@ -118,7 +120,7 @@ async function send(prepared){
 $("send").addEventListener("click",send);
 $("question").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});
 $("voice").addEventListener("click",()=>{
-  if(prefs.engine!=="neural"&&!("speechSynthesis" in window)){alert("Озвучка недоступна в этом браузере");return}
+  if(!cloudVoice()&&!("speechSynthesis" in window)){alert("Озвучка недоступна в этом браузере");return}
   voice=!voice;$("voice").textContent=voice?"◉ Озвучка: вкл.":"◉ Озвучка: выкл.";
   $("voice").setAttribute("aria-pressed",String(voice));if(!voice){stopVoiceSession();stopOutput();document.body.dataset.state="idle"}
 });
@@ -178,7 +180,7 @@ async function captureVoice(dictation){
 }
 talk.onclick=()=>{
  if(voiceSession){stopVoiceSession();stopOutput();check();return}
- if(prefs.engine==='neural'&&!neuralConfigured){$("status").textContent="Нейронный голос ещё не подключён. Откройте настройки голоса.";$("settings").showModal();return}if(prefs.engine!=='neural'&&!('speechSynthesis' in window)){$("status").textContent="Озвучка недоступна. Можно использовать диктовку.";return}
+ if(cloudVoice()&&!voiceReady()){$("status").textContent="Нейронный голос ещё не подключён. Откройте настройки голоса.";$("settings").showModal();return}if(!cloudVoice()&&!('speechSynthesis' in window)){$("status").textContent="Озвучка недоступна. Можно использовать диктовку.";return}
  stopCapture();stopOutput();voiceSession=true;voice=true;$("voice").textContent="◉ Озвучка: вкл.";$("voice").setAttribute('aria-pressed','true');talk.textContent="■  Завершить разговор";talk.setAttribute('aria-pressed','true');
  $("stage-voice").lastElementChild.textContent="Завершить разговор";closeNavigation();startListening();
 };
@@ -208,10 +210,10 @@ const prefsKey="talgat-ui-preferences";
 let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device"};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
-  prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=prefs.engine==='neural'?'neural':'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
+  prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['neural','fish'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
   document.body.classList.toggle("light",prefs.theme==="light");
   document.documentElement.style.setProperty("--size",Math.max(14,Math.min(20,Number(prefs.font)||16))+"px");
-  $("speech-engine").value=prefs.engine==="neural"?"neural":"device";
+  $("speech-engine").value=prefs.engine;
   $("speech-language").value=["ru","kk","en"].includes(prefs.language)?prefs.language:"ru";
   $("theme").value=prefs.theme==="light"?"light":"dark";
   $("memory").value=typeof prefs.memory==="string"?prefs.memory:"";$("font-size").value=prefs.font;$("voice-rate").value=prefs.rate;$("motion").value=prefs.motion;
