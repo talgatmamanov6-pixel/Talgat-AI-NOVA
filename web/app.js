@@ -45,7 +45,7 @@ async function check(){
     const r=await fetch("/api/status",{cache:"no-store"});
     const d=await readJson(r);
     if(!r.ok||!d.ok)throw new Error(d.error||"HTTP "+r.status);
-    $("status").textContent=d.ai_configured?"● Сервер готов · "+(d.version||"2.0"):"● Сервер доступен, но API-ключ не настроен";
+    $("status").textContent=d.ai_configured?"● API доступен, ключ задан · "+(d.version||"2.0"):"● Сервер доступен, но API-ключ не настроен";
   }catch(e){$("status").textContent="● API недоступен: "+e.message}
 }
 check();
@@ -89,7 +89,7 @@ $("voice").addEventListener("click",()=>{
   voice=!voice;$("voice").textContent=voice?"🔊 Голос: вкл.":"🔊 Голос: выкл.";
   if(!voice)speechSynthesis.cancel();
 });
-$("stop").addEventListener("click",()=>{controller?.abort();speechSynthesis?.cancel?.();recognition?.stop?.()});
+$("stop").addEventListener("click",()=>{controller?.abort();window.speechSynthesis?.cancel?.();recognition?.stop?.()});
 const actions=document.querySelector(".buttons");
 const clear=document.createElement("button");clear.className="secondary";clear.textContent="Очистить историю";
 clear.onclick=()=>{history=[];save();$("chat").replaceChildren();add("assistant","История этого устройства очищена.")};
