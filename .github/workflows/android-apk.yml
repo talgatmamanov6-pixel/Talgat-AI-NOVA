@@ -1,10 +1,5 @@
 name: Build Talgat AI Android APK
 on:
-  push:
-    branches: [talgat-ai-2-staging]
-    paths:
-      - '.github/workflows/android-apk.yml'
-      - 'web/**'
   workflow_dispatch:
 jobs:
   apk:
