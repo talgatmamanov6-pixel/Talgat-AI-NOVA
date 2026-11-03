@@ -7,7 +7,7 @@ try{const saved=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isAr
 const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(history.slice(-20)))}catch{}};
 function safeMath(source){
   const tokens=[];
-  const protectedText=source.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\]|\$(?!\s)[^$\n]+?\$)/g,m=>{
+  const protectedText=source.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\s)[^$\n]+?\$)/g,m=>{
     const display=m.startsWith("$$")||m.startsWith("\\[");
     const latex=m.startsWith("$$")?m.slice(2,-2):m.startsWith("\\[")||m.startsWith("\\(")?m.slice(2,-2):m.slice(1,-1);
     let html;
