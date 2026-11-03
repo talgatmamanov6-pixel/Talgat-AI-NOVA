@@ -1,6 +1,7 @@
 "use strict";
 const $=id=>document.getElementById(id);
 let busy=false,voice=false,controller=null,recognition=null,voiceSession=false;
+const speechError=code=>({"not-allowed":"Разрешите микрофон и звук в настройках браузера.","audio-capture":"Микрофон не найден.","network":"Проверьте интернет для распознавания речи.","service-not-allowed":"Голосовой сервис недоступен в этом браузере.","language-not-supported":"Русская речь не поддерживается голосовой системой устройства.","synthesis-unavailable":"На устройстве недоступен голос для озвучки."}[code]||"Голосовая функция недоступна. Попробуйте другой браузер.");
 const storageKey="talgat-ai-2-history";
 let history=[];
 try{const saved=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(saved))history=saved.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string").slice(-20)}catch{}
@@ -62,7 +63,7 @@ function say(source){
   u.lang="ru-RU";u.rate=Number($("voice-rate").value)||0.95;
   u.onstart=()=>{document.body.dataset.state="speaking"};
   u.onend=()=>{document.body.dataset.state="idle";if(voiceSession)startListening()};
-  u.onerror=e=>{document.body.dataset.state="idle";if(voiceSession)stopVoiceSession();if(!["interrupted","canceled"].includes(e.error))$("status").textContent="Озвучка недоступна: "+e.error};
+  u.onerror=e=>{document.body.dataset.state="idle";if(voiceSession)stopVoiceSession();if(!["interrupted","canceled"].includes(e.error))$("status").textContent=speechError(e.error)};
   const voices=speechSynthesis.getVoices();
   u.voice=voices.find(v=>v.lang.toLowerCase().startsWith("ru"))||null;
   speechSynthesis.speak(u);
@@ -95,12 +96,12 @@ $("question").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.
 $("voice").addEventListener("click",()=>{
   if(!("speechSynthesis" in window)){alert("Озвучка недоступна в этом браузере");return}
   voice=!voice;$("voice").textContent=voice?"◉ Голос: вкл.":"◉ Голос: выкл.";
-  $("voice").setAttribute("aria-pressed",String(voice));if(!voice){speechSynthesis.cancel();document.body.dataset.state="idle"}
+  $("voice").setAttribute("aria-pressed",String(voice));if(!voice){stopVoiceSession();speechSynthesis.cancel();document.body.dataset.state="idle"}
 });
-$("stop").addEventListener("click",()=>{stopVoiceSession();controller?.abort();window.speechSynthesis?.cancel?.();document.body.dataset.state="idle";recognition?.stop?.()});
+$("stop").addEventListener("click",()=>{stopVoiceSession();controller?.abort();window.window.speechSynthesis?.cancel?.();document.body.dataset.state="idle";recognition?.stop?.()});
 const actions=document.querySelector(".buttons");
 const clear=document.createElement("button");clear.className="secondary";clear.textContent="Очистить историю";
-clear.onclick=()=>{if(busy)return;stopVoiceSession();history=[];save();$("chat").replaceChildren();document.body.classList.remove("has-chat");document.body.dataset.state="idle";speechSynthesis?.cancel?.();document.body.classList.remove("nav-open")};
+clear.onclick=()=>{if(busy)return;stopVoiceSession();history=[];save();$("chat").replaceChildren();document.body.classList.remove("has-chat");document.body.dataset.state="idle";window.speechSynthesis?.cancel?.();document.body.classList.remove("nav-open")};
 $("newchat").onclick=clear.onclick;
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 const talk=document.createElement("button");talk.className="navitem";talk.textContent="◉  Голосовой диалог";talk.id="voice-dialog";talk.setAttribute("aria-pressed","false");
@@ -112,12 +113,12 @@ function startListening(){
  let gotResult=false;
  document.body.dataset.state="listening";$("status").textContent="Слушаю вас…";
  recognition.onresult=e=>{const text=(e.results[0]?.[0]?.transcript||"").trim();if(text){gotResult=true;$("question").value=text;send()}};
- recognition.onerror=e=>{if(!["no-speech","aborted"].includes(e.error)){stopVoiceSession();$("status").textContent="Микрофон: "+e.error}};
+ recognition.onerror=e=>{if(!["no-speech","aborted"].includes(e.error)){stopVoiceSession();$("status").textContent=speechError(e.error)}};
  recognition.onend=()=>{recognition=null;if(voiceSession&&!gotResult&&!busy)setTimeout(startListening,800)};
  try{recognition.start()}catch{recognition=null;stopVoiceSession();$("status").textContent="Не удалось запустить микрофон"}
 }
 talk.onclick=()=>{
- if(voiceSession){stopVoiceSession();speechSynthesis?.cancel?.();check();return}
+ if(voiceSession){stopVoiceSession();window.speechSynthesis?.cancel?.();check();return}
  if(!SpeechRecognition){$("status").textContent="Распознавание речи не поддерживается браузером";return}
  if(!("speechSynthesis" in window)){ $("status").textContent="Озвучка не поддерживается браузером";return }
  voiceSession=true;voice=true;$("voice").textContent="◉ Голос: вкл.";$("voice").setAttribute("aria-pressed","true");talk.textContent="■  Завершить разговор";talk.setAttribute("aria-pressed","true");document.body.classList.remove("nav-open");startListening();
@@ -129,7 +130,7 @@ if(SpeechRecognition){
   if(recognition){recognition.stop();return}
   recognition=new SpeechRecognition();recognition.lang="ru-RU";recognition.interimResults=false;
   recognition.onresult=e=>{$("question").value=(e.results[0]?.[0]?.transcript||"").trim()};
-  recognition.onerror=e=>{$("status").textContent="Микрофон: "+e.error};
+  recognition.onerror=e=>{$("status").textContent=speechError(e.error)};
   recognition.onend=()=>{recognition=null;mic.textContent="🎙 Диктовка";document.body.dataset.state="idle"};
   mic.textContent="■ Слушаю";document.body.dataset.state="listening";try{recognition.start()}catch{recognition=null;mic.textContent="🎙 Диктовка"}
  };actions.append(mic);
