@@ -18,7 +18,7 @@ function printResult(el,source){
  const math=doc.createElement('link');math.rel='stylesheet';math.href=location.origin+'/vendor/katex.min.css';doc.head.append(math);
  const style=doc.createElement('style');style.textContent='body{font:15px/1.65 system-ui,sans-serif;max-width:850px;margin:40px auto;padding:20px;color:#14202b}h1,h2,h3{line-height:1.25;break-after:avoid}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bac4ce;padding:8px}pre{white-space:pre-wrap;background:#f1f4f7;padding:15px;overflow-wrap:anywhere}img{max-width:100%}.katex-display{overflow:auto}@page{margin:18mm}@media print{body{margin:0;padding:0}.print-button{display:none}}';doc.head.append(style);
  const button=doc.createElement('button');button.className='print-button';button.textContent='Печать / Сохранить в PDF';button.onclick=()=>popup.print();doc.body.append(button);
- const copy=el.cloneNode(true);for(const node of copy.querySelectorAll('.messageactions,.codeactions'))node.remove();doc.body.append(copy);
+ const copy=el.cloneNode(true);for(const node of copy.querySelectorAll('.messageactions,.codeactions,.table-export'))node.remove();doc.body.append(copy);
 }
 function decorate(el,source){
  const bar=el.querySelector('.messageactions');if(!bar)return;
