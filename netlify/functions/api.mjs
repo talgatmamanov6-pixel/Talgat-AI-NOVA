@@ -1,22 +1,47 @@
-const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});
+// Talgat AI 2.0 — server-side Groq proxy. Never expose GROQ_API_KEY to the browser.
+const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}});
+const getEnv=(name)=>{try{return Netlify.env.get(name)}catch{return undefined}};
 export default async function handler(request){
- const path=new URL(request.url).pathname;
- const key=Netlify.env.get("GROQ_API_KEY");
- if(path.endsWith("/status"))return request.method==="GET"?reply({ok:true,ai_configured:!!key,version:"2.0-staging"}):reply({error:"Method not allowed"},405);
- if(!path.endsWith("/chat"))return reply({error:"Not found"},404);
- if(request.method!=="POST")return reply({error:"Method not allowed"},405);
- if(!key)return reply({error:"AI service is not configured"},503);
- let body;try{body=await request.json()}catch{return reply({error:"Invalid JSON"},400)}
- const message=typeof body?.message==="string"?body.message.trim():"";
- if(!message||message.length>12000)return reply({error:"Введите вопрос до 12000 символов"},400);
- const history=Array.isArray(body.history)?body.history.slice(-12).filter(x=>["user","assistant"].includes(x?.role)&&typeof x.content==="string").map(x=>({role:x.role,content:x.content.slice(0,12000)})):[];
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
- try{
- const upstream=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},body:JSON.stringify({model:"llama-3.3-70b-versatile",messages:[{role:"system",content:"Ты Talgat AI 2.0. Отвечай на языке пользователя, точно и понятно. Используй Markdown и LaTeX при необходимости."},...history,{role:"user",content:message}],max_tokens:1800,temperature:0.5}),signal:controller.signal});
- const data=await upstream.json().catch(()=>({}));
- if(!upstream.ok)return reply({error:upstream.status===429?"Слишком много запросов, повторите позже":"Ошибка AI-сервиса",upstream_status:upstream.status},upstream.status===429?429:502);
- const answer=data?.choices?.[0]?.message?.content;
- return typeof answer==="string"&&answer.trim()?reply({answer}):reply({error:"Пустой ответ модели"},502);
- }catch(e){return reply({error:e?.name==="AbortError"?"Превышено время ожидания":"Не удалось связаться с AI-сервисом"},504)}finally{clearTimeout(timer)}
+  const path=new URL(request.url).pathname;
+  const key=getEnv("GROQ_API_KEY");
+  if(path==="/api/status"){
+    if(request.method!=="GET")return json({error:"Method not allowed"},405);
+    return json({ok:true,ai_configured:Boolean(key),version:"2.0-staging",provider:"groq"});
+  }
+  if(path!=="/api/chat")return json({error:"Not found"},404);
+  if(request.method!=="POST")return json({error:"Method not allowed"},405);
+  if(!key)return json({error:"AI service is not configured"},503);
+  let body;
+  try{body=await request.json()}catch{return json({error:"Некорректный JSON в запросе"},400)}
+  const message=typeof body?.message==="string"?body.message.trim():"";
+  if(!message||message.length>12000)return json({error:"Введите вопрос длиной от 1 до 12000 символов"},400);
+  const history=(Array.isArray(body.history)?body.history:[])
+    .filter(m=>m&&["user","assistant"].includes(m.role)&&typeof m.content==="string")
+    .slice(-12).map(m=>({role:m.role,content:m.content.slice(0,8000)}));
+  const model=getEnv("GROQ_MODEL")||"llama-3.3-70b-versatile";
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),25000);
+  try{
+    const upstream=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+      method:"POST",signal:controller.signal,
+      headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model,max_tokens:2048,temperature:0.4,
+        messages:[{role:"system",content:"Ты Talgat AI 2.0, интеллектуальный помощник. Отвечай самостоятельно, по существу, на языке пользователя. Используй корректный Markdown, а для формул LaTeX. Не выдумывай факты, возможности, выполненные действия или ссылки. Если данных недостаточно, сообщай об ограничениях."},...history,{role:"user",content:message}]
+      })
+    });
+    const raw=await upstream.text();
+    let data;try{data=JSON.parse(raw)}catch{return json({error:"AI-провайдер вернул ответ не в формате JSON",upstream_status:upstream.status},502)}
+    if(!upstream.ok){
+      const code=upstream.status;
+      const error=code===401?"Ключ AI-провайдера недействителен":code===429?"Превышен лимит запросов к модели":code===400?"Модель или параметры запроса отклонены AI-провайдером":"Ошибка AI-провайдера";
+      return json({error,upstream_status:code},code===429?429:502);
+    }
+    const answer=data?.choices?.[0]?.message?.content;
+    if(typeof answer!=="string"||!answer.trim())return json({error:"Модель вернула пустой ответ"},502);
+    return json({answer,model:data.model||model});
+  }catch(e){
+    return json({error:e?.name==="AbortError"?"Истекло время ожидания ответа AI":"Не удалось подключиться к AI-провайдеру"},e?.name==="AbortError"?504:502);
+  }finally{clearTimeout(timer)}
 }
 export const config={path:["/api/status","/api/chat"]};
