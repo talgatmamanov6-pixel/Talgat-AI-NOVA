@@ -69,3 +69,12 @@ test("provider 429 is reported as JSON 429",async()=>{
     assert.equal((await res.json()).upstream_status,429);
   }finally{globalThis.fetch=old}
 });
+test('provider length cutoff is explicitly reported',async()=>{
+ setKey('test-secret');const original=globalThis.fetch;
+ globalThis.fetch=async(url,options)=>{assert.equal(JSON.parse(options.body).max_completion_tokens,4096);return Response.json({choices:[{message:{content:'Незаконченный ответ'},finish_reason:'length'}]})};
+ try{const data=await (await handler(request('/api/chat','POST',{message:'Создай длинный документ'}))).json();assert.equal(data.truncated,true)}finally{globalThis.fetch=original}
+});
+test('supported arithmetic quiz bypasses language model and does not expose credentials',async()=>{
+ setKey('test-secret');const original=globalThis.fetch;globalThis.fetch=()=>{throw new Error('No LLM expected')};
+ try{const res=await handler(request('/api/chat','POST',{message:'/quiz сложение дробей с одинаковым знаменателем'}));const data=await res.json();assert.equal(res.status,200);assert.equal(data.engine,'exact-rational-arithmetic');assert.equal(data.answer.includes('test-secret'),false)}finally{globalThis.fetch=original}
+});

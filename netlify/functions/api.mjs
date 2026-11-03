@@ -1,3 +1,4 @@
+import {verifiedFractionQuiz} from "./fraction-quiz.mjs";
 // Talgat AI 2.0 — server-side Groq proxy. Never expose GROQ_API_KEY to the browser.
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}});
 const getEnv=(name)=>{try{return Netlify.env.get(name)}catch{return undefined}};
@@ -15,6 +16,7 @@ export default async function handler(request){
   try{body=await request.json()}catch{return json({error:"Некорректный JSON в запросе"},400)}
   const message=typeof body?.message==="string"?body.message.trim():"";
   if(!message||message.length>12000)return json({error:"Введите вопрос длиной от 1 до 12000 символов"},400);
+  const verified=verifiedFractionQuiz(message);if(verified)return json(verified);
   const preferences=typeof body?.preferences==="string"?body.preferences.trim().slice(0,2000):"";
   const system="Ты Talgat AI 2.0, интеллектуальный помощник. Отвечай на языке пользователя, ясно, точно и по существу. Не выдумывай факты или выполненные действия. Для обычных ответов используй чистый Markdown без лишних декоративных символов. Формулы оформляй LaTeX строго внутри $...$ или \\( ... \\). Код помещай в тройные обратные кавычки с указанием языка. Не показывай внутренние рассуждения. Учитывай предпочтения пользователя, если они совместимы с задачей: "+preferences;
   const history=(Array.isArray(body.history)?body.history:[])
@@ -31,7 +33,7 @@ export default async function handler(request){
       method:"POST",signal:controller.signal,
       headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
       body:JSON.stringify({
-        model,max_completion_tokens:mode==="code"?4096:2048,temperature:0.4,
+        model,max_completion_tokens:4096,temperature:0.4,
         messages
       })
     });
@@ -45,7 +47,7 @@ export default async function handler(request){
           upstream=await fetch("https://api.groq.com/openai/v1/chat/completions",{
             method:"POST",signal:controller.signal,
             headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
-            body:JSON.stringify({model:fallback,max_completion_tokens:mode==="code"?4096:2048,messages})
+            body:JSON.stringify({model:fallback,max_completion_tokens:4096,messages})
           });
           if(upstream.ok||![404,410].includes(upstream.status))break;
         }
@@ -60,7 +62,7 @@ export default async function handler(request){
     }
     const answer=data?.choices?.[0]?.message?.content;
     if(typeof answer!=="string"||!answer.trim())return json({error:"Модель вернула пустой ответ"},502);
-    return json({answer,model:data.model||model});
+    return json({answer,model:data.model||model,truncated:data?.choices?.[0]?.finish_reason==="length"});
   }catch(e){
     return json({error:e?.name==="AbortError"?"Истекло время ожидания ответа AI":"Не удалось подключиться к AI-провайдеру"},e?.name==="AbortError"?504:502);
   }finally{clearTimeout(timer)}

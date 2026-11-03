@@ -40,7 +40,7 @@ function add(role,source){
   render(el,role,source);
   $("chat").append(el);
   document.body.classList.add("has-chat");
-  if(role==="assistant"&&source!=="Думаю…"){const bar=document.createElement("div");bar.className="messageactions";const copy=document.createElement("button");copy.textContent="Копировать";copy.onclick=async()=>{try{await navigator.clipboard.writeText(source);copy.textContent="Скопировано"}catch{copy.textContent="Копирование недоступно"}};const read=document.createElement("button");read.textContent="Озвучить";read.onclick=()=>{voice=true;$("voice").textContent="◉ Озвучка: вкл.";say(source)};bar.append(copy,read);el.append(bar)}
+  if(role==="assistant"&&source!=="Думаю…"){const bar=document.createElement("div");bar.className="messageactions";const copy=document.createElement("button");copy.textContent="Копировать";copy.onclick=async()=>{try{await navigator.clipboard.writeText(source);copy.textContent="Скопировано"}catch{copy.textContent="Копирование недоступно"}};const read=document.createElement("button");read.textContent="Озвучить";read.onclick=()=>{voice=true;$("voice").textContent="◉ Озвучка: вкл.";say(source)};bar.append(copy,read);el.append(bar);window.TalgatWorkspace?.decorate(el,source)}
   $("chat").scrollTop=$("chat").scrollHeight;
   return el;
 }
@@ -71,11 +71,13 @@ function say(source){
   u.voice=voices.find(v=>v.lang.toLowerCase().startsWith("ru"))||null;
   speechSynthesis.speak(u);
 }
-async function send(){
-  const question=$("question").value.trim();
+async function send(prepared){
+  let question=typeof prepared?.prompt==="string"?prepared.prompt:$("question").value.trim();
+  const visibleQuestion=typeof prepared?.display==="string"?prepared.display:question;
   if(!question||busy)return;
+  if(typeof prepared?.prompt!=="string")question=window.TalgatCommand?window.TalgatCommand(question):question;if(!question)return;
   const previous=history.slice(-12);
-  add("user",question);$("question").value="";
+  add("user",visibleQuestion);$("question").value="";
   busy=true;document.body.dataset.state="thinking";$("send").disabled=true;
   controller=new AbortController();
   const pending=add("assistant","Думаю…");
@@ -85,8 +87,9 @@ async function send(){
     const d=await readJson(r);
     if(!r.ok)throw new Error(d.error||"HTTP "+r.status);
     if(typeof d.answer!=="string"||!d.answer.trim())throw new Error("Модель вернула пустой ответ");
-    pending.remove();add("assistant",d.answer);
-    history.push({role:"user",content:question},{role:"assistant",content:d.answer});save();say(d.answer);
+    const answer=d.answer+(d.truncated?"\n\n> Ответ остановлен из-за лимита длины и может быть незавершён. Напишите «Продолжи», чтобы получить оставшуюся часть.":"");
+    pending.remove();add("assistant",answer);
+    history.push({role:"user",content:visibleQuestion},{role:"assistant",content:answer});save();say(answer);
   }catch(e){
     pending.remove();
     const detail=e.name==="AbortError"?"Превышено время ожидания или запрос остановлен.":e instanceof TypeError?"Не удалось подключиться к API. Проверьте интернет и публикацию /api/chat.":e.message;
