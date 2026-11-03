@@ -33,7 +33,7 @@ export default async function handler(request){
       method:"POST",signal:controller.signal,
       headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
       body:JSON.stringify({
-        model,max_completion_tokens:mode==="code"?4096:2048,temperature:0.4,
+        model,max_completion_tokens:4096,temperature:0.4,
         messages
       })
     });
@@ -47,7 +47,7 @@ export default async function handler(request){
           upstream=await fetch("https://api.groq.com/openai/v1/chat/completions",{
             method:"POST",signal:controller.signal,
             headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
-            body:JSON.stringify({model:fallback,max_completion_tokens:mode==="code"?4096:2048,messages})
+            body:JSON.stringify({model:fallback,max_completion_tokens:4096,messages})
           });
           if(upstream.ok||![404,410].includes(upstream.status))break;
         }
@@ -62,7 +62,7 @@ export default async function handler(request){
     }
     const answer=data?.choices?.[0]?.message?.content;
     if(typeof answer!=="string"||!answer.trim())return json({error:"Модель вернула пустой ответ"},502);
-    return json({answer,model:data.model||model});
+    return json({answer,model:data.model||model,truncated:data?.choices?.[0]?.finish_reason==="length"});
   }catch(e){
     return json({error:e?.name==="AbortError"?"Истекло время ожидания ответа AI":"Не удалось подключиться к AI-провайдеру"},e?.name==="AbortError"?504:502);
   }finally{clearTimeout(timer)}

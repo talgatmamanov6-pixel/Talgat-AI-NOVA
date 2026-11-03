@@ -87,8 +87,9 @@ async function send(prepared){
     const d=await readJson(r);
     if(!r.ok)throw new Error(d.error||"HTTP "+r.status);
     if(typeof d.answer!=="string"||!d.answer.trim())throw new Error("Модель вернула пустой ответ");
-    pending.remove();add("assistant",d.answer);
-    history.push({role:"user",content:visibleQuestion},{role:"assistant",content:d.answer});save();say(d.answer);
+    const answer=d.answer+(d.truncated?"\n\n> Ответ остановлен из-за лимита длины и может быть незавершён. Напишите «Продолжи», чтобы получить оставшуюся часть.":"");
+    pending.remove();add("assistant",answer);
+    history.push({role:"user",content:visibleQuestion},{role:"assistant",content:answer});save();say(answer);
   }catch(e){
     pending.remove();
     const detail=e.name==="AbortError"?"Превышено время ожидания или запрос остановлен.":e instanceof TypeError?"Не удалось подключиться к API. Проверьте интернет и публикацию /api/chat.":e.message;
