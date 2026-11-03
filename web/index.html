@@ -1,1 +1,50 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Talgat AI 2.0</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><style>*{box-sizing:border-box}body{margin:0;background:#090f20;color:#e9f3ff;font:16px system-ui}main{max-width:850px;margin:auto;min-height:100dvh;display:flex;flex-direction:column;padding:16px 14px max(14px,env(safe-area-inset-bottom))}header{border-bottom:1px solid #35445e;padding:10px 0 20px}h1{font-size:24px;color:#81e8da;margin:0}small{color:#a8bbd6}#chat{flex:1;min-height:45vh;padding:14px 0}.bubble{background:#17253e;border-radius:17px;padding:14px 16px;margin:12px 0;line-height:1.6;overflow-wrap:anywhere}.user{background:#17524c;margin-left:16%}.assistant{margin-right:5%}pre{overflow:auto;background:#090f20;padding:12px;border-radius:8px}table{display:block;overflow:auto}td,th{border:1px solid #52647e;padding:6px}footer{position:sticky;bottom:0;background:#090f20;padding-top:10px}textarea{width:100%;min-height:76px;border:1px solid #48627e;border-radius:15px;background:#121f35;color:white;padding:13px;font:inherit}button{border:0;border-radius:12px;background:#75e6d1;color:#06221f;padding:12px;font-weight:700;min-height:45px}.secondary{background:#253a59;color:white}.buttons{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.katex-display{overflow:auto}button:disabled{opacity:.5}</style></head><body><main><header><h1>✦ TALGAT AI 2.0</h1><small id="status">Проверка сервера…</small></header><section id="chat"><article class="bubble assistant">Здравствуйте! Я Talgat AI. Напишите ваш вопрос.</article></section><footer><textarea id="question" placeholder="Спросите что-нибудь…"></textarea><div class="buttons"><button id="send">Отправить</button><button id="voice" class="secondary">🔊 Голос: выкл.</button><button id="stop" class="secondary">Стоп</button></div></footer></main><script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js"></script><script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script><script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script><script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script><script src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1224">
+<meta name="description" content="Talgat AI 2.0 — интеллектуальный помощник с голосом и форматированными ответами.">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<title>Talgat AI 2.0</title>
+<style>
+:root{color-scheme:dark;--bg:#090f1d;--panel:#141f34;--edge:#283950;--ink:#edf4ff;--muted:#a7b8d1;--accent:#67e9ce}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+body{background:radial-gradient(ellipse at 50% -20%,#173e55 0,transparent 55%),var(--bg)}
+main{max-width:900px;margin:auto;min-height:100dvh;display:flex;flex-direction:column;padding:16px clamp(12px,4vw,28px) max(18px,env(safe-area-inset-bottom))}
+header{display:flex;gap:14px;align-items:center;border-bottom:1px solid var(--edge);padding:8px 0 18px}
+.logo{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:linear-gradient(145deg,#83ffe3,#497db5);box-shadow:0 0 24px #44e3cc44;color:#06232b;font-size:27px;font-weight:900}
+h1{font-size:clamp(20px,4vw,27px);letter-spacing:.025em;margin:0;color:#e5fff9}small{color:var(--muted);font-size:12px}
+#chat{flex:1;min-height:42vh;padding:16px 0 26px;display:flex;flex-direction:column;justify-content:flex-end}
+.bubble{max-width:94%;background:var(--panel);border:1px solid var(--edge);border-radius:18px;padding:13px 16px;margin:7px 0;line-height:1.62;overflow-wrap:anywhere;box-shadow:0 6px 24px #0002}
+.bubble.user{background:linear-gradient(145deg,#17544d,#174043);border-color:#286e61;align-self:flex-end;max-width:85%}
+.bubble.assistant{align-self:flex-start}.bubble>:first-child{margin-top:0}.bubble>:last-child{margin-bottom:0}
+.bubble p{margin:.6em 0}.bubble ul,.bubble ol{padding-left:1.4em}.bubble a{color:#86e4ff}.bubble blockquote{border-left:3px solid #65cbb8;padding-left:12px;color:#c2d8e4;margin-left:0}
+.bubble pre{overflow:auto;background:#090f1d;border:1px solid #2e435e;padding:13px;border-radius:10px;font-size:13px}
+.bubble code{overflow-wrap:anywhere}.bubble :not(pre)>code{background:#0c2940;padding:2px 5px;border-radius:5px}
+.bubble table{display:block;max-width:100%;overflow:auto;border-collapse:collapse}.bubble td,.bubble th{border:1px solid #3c526d;padding:7px 9px}.bubble th{background:#243a54}
+.katex-display{overflow-x:auto;overflow-y:hidden;padding:5px 0}
+footer{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 18%);padding:20px 0 0}
+textarea{width:100%;min-height:84px;max-height:35vh;resize:vertical;border:1px solid #43647d;border-radius:16px;background:#121e31;color:var(--ink);padding:14px;font:inherit;outline:none}
+textarea:focus{border-color:#69ddc7;box-shadow:0 0 0 3px #69ddc722}
+button{border:0;border-radius:12px;background:var(--accent);color:#082b29;padding:10px 14px;font-weight:700;min-height:44px;cursor:pointer}
+button.secondary{background:#243650;color:#e5f1ff;border:1px solid #39506a}
+button:disabled{opacity:.5;cursor:wait}.buttons{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.note{font-size:11px;color:var(--muted);margin:4px 0}
+@media(max-width:540px){main{padding:10px 12px max(12px,env(safe-area-inset-bottom))}.bubble{max-width:100%}.bubble.user{max-width:91%}.buttons button{flex:1 1 auto;font-size:12px;padding:9px}header{padding-bottom:12px}}
+</style>
+</head>
+<body><main>
+<header><div class="logo" aria-hidden="true">✦</div><div><h1>TALGAT AI 2.0</h1><small id="status" role="status">Проверка сервера…</small></div></header>
+<section id="chat" aria-live="polite"><article class="bubble assistant">Здравствуйте! Я Talgat AI. Напишите вопрос — я постараюсь ответить подробно и понятно.</article></section>
+<footer><label for="question" class="note">Ваш вопрос</label><textarea id="question" placeholder="Напишите сообщение… (Enter — отправить, Shift+Enter — новая строка)" aria-label="Ваш вопрос"></textarea>
+<div class="buttons"><button id="send">Отправить</button><button id="voice" class="secondary">🔊 Голос: выкл.</button><button id="stop" class="secondary">Стоп</button></div>
+<p class="note">Озвучка и диктовка зависят от возможностей браузера. История хранится только на этом устройстве.</p>
+</footer></main>
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="/app.js"></script>
+</body></html>
