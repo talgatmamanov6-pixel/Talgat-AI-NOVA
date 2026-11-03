@@ -3,7 +3,7 @@
 const get=id=>document.getElementById(id),catalog=window.TalgatSkills;
 let selected=catalog.items[0],category='Все';
 const key='talgat-saved-results-v1';let saved=[];
-try{const data=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(data))saved=data.filter(x=>typeof x.id==='string'&&typeof x.source==='string'&&x.source.length<=100000&&typeof x.title==='string').slice(0,24)}catch{}
+try{const data=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(data))saved=data.filter(x=>x&&typeof x.id==='string'&&typeof x.source==='string'&&x.source.length<=100000&&typeof x.title==='string').slice(0,24)}catch{}
 const persist=()=>{try{localStorage.setItem(key,JSON.stringify(saved));return true}catch{get('status').textContent='Не хватает места в браузере. Скачайте результат.';return false}};
 function download(filename,content){
  const form=document.createElement('form');form.method='POST';form.action='/api/export';form.hidden=true;
@@ -40,7 +40,7 @@ function drawList(){
  for(const skill of items){const button=document.createElement('button');button.className='skill-card'+(skill.id===selected.id?' chosen':'');button.type='button';button.setAttribute('aria-pressed',String(skill.id===selected.id));const label=document.createElement('strong');label.textContent=skill.title;const sub=document.createElement('small');sub.textContent='/'+skill.id+' · '+skill.category;button.append(label,sub);button.onclick=()=>choose(skill);get('skill-list').append(button)}
  if(!items.length)get('skill-list').textContent='Ничего не найдено. Измените запрос.';
 }
-function open(id){if(id){const skill=catalog.items.find(s=>s.id===id);if(skill)choose(skill)}get('skills').showModal();document.body.classList.remove('nav-open');drawList()}
+function open(id){if(id){const skill=catalog.items.find(s=>s.id===id);if(skill)choose(skill)}get('skills').showModal();window.closeTalgatNavigation?.();drawList()}
 get('skills-open').onclick=()=>open();get('skills-shortcut').onclick=()=>open();get('skills-close').onclick=()=>get('skills').close();get('skill-search').oninput=drawList;
 for(const value of ['Все',...new Set(catalog.items.map(s=>s.category))]){const button=document.createElement('button');button.type='button';button.textContent=value;button.setAttribute('aria-pressed',String(value===category));button.onclick=()=>{category=value;for(const item of get('skill-categories').children)item.setAttribute('aria-pressed',String(item===button));drawList()};get('skill-categories').append(button)}
 get('skill-form').onsubmit=e=>{
@@ -54,6 +54,6 @@ function showSaved(){
  get('saved-list').replaceChildren();get('saved-preview').replaceChildren();get('saved-empty').hidden=saved.length>0;
  for(const item of saved){const row=document.createElement('div');row.className='saved-row';const button=document.createElement('button');button.textContent=item.title;button.onclick=()=>{get('saved-preview').replaceChildren();const el=document.createElement('article');el.className='bubble assistant';render(el,'assistant',item.source);const bar=document.createElement('div');bar.className='messageactions';el.append(bar);decorate(el,item.source);get('saved-preview').append(el)};const remove=document.createElement('button');remove.textContent='×';remove.setAttribute('aria-label','Удалить '+item.title);remove.onclick=()=>{const before=saved;saved=saved.filter(x=>x.id!==item.id);if(!persist())saved=before;showSaved()};row.append(button,remove);get('saved-list').append(row)}
 }
-get('saved-open').onclick=()=>{showSaved();get('saved').showModal();document.body.classList.remove('nav-open')};get('saved-close').onclick=()=>get('saved').close();
+get('saved-open').onclick=()=>{showSaved();get('saved').showModal();window.closeTalgatNavigation?.()};get('saved-close').onclick=()=>get('saved').close();
 choose(selected);
 })();
