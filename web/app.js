@@ -9,6 +9,7 @@ const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(history.slice
 function safeMath(source){
   const tokens=[];
   const protectedText=source.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\s)[^$\n]+?\$)/g,m=>{
+    if(!m.startsWith("$$")&&/^\$\d/.test(m)&&!/[=^_\\]/.test(m))return m;
     const display=m.startsWith("$$")||m.startsWith("\\[");
     const latex=m.startsWith("$$")?m.slice(2,-2):m.startsWith("\\[")||m.startsWith("\\(")?m.slice(2,-2):m.slice(1,-1);
     let html;

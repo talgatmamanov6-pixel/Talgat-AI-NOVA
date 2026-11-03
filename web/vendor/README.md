@@ -1,0 +1,1 @@
+Vendored browser dependencies: marked 15.0.12 (MIT), DOMPurify 3.2.6 (Apache-2.0 OR MPL-2.0), KaTeX 0.16.11 (MIT). Source: their official npm distributions via jsDelivr. Packaged locally so Markdown, tables and math do not depend on third-party runtime access. KaTeX WOFF2 fonts are embedded in CSS.
