@@ -17,8 +17,9 @@ jobs:
         run: |
           node --check netlify/functions/api.mjs
           node --check web/app.js
+          node --check netlify/functions/transcribe.mjs
       - name: Test API behavior (mocked Groq)
-        run: node --test tests/api.test.mjs tests/voice-ui.test.cjs
+        run: node --test tests/*.test.*
       - name: Verify PWA files
         run: |
           test -s web/index.html
