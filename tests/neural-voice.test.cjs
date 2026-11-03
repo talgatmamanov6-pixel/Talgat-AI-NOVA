@@ -11,3 +11,9 @@ test('missing server voice reports an error and never substitutes device speech'
  const a=setup(async()=>Response.json({error:'Голос не подключён'},{status:503}));await a.voice.speak('Тест','ru',1);assert.deepEqual(a.errors,['Голос не подключён']);assert.equal(a.players.length,0);assert.equal(a.ended,0);
 });
 test('chunking preserves every word within endpoint limits',()=>{const source=('длинная реплика '.repeat(400)).trim(),result=chunks(source);assert.ok(result.length>1&&result.every(x=>x.length<=1000));assert.equal(result.join(' '),source)});
+test('hung neural requests time out with a readable error',async()=>{
+ const a=setup((url,opts)=>new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(Object.assign(new Error('aborted'),{name:'AbortError'})))));a.voice.deps.timeoutMs=10;await a.voice.speak('Тест','ru',1);assert.match(a.errors[0],/время ожидания/);assert.equal(a.ended,0);
+});
+test('HTML masquerading as a successful audio response is rejected',async()=>{
+ const a=setup(async()=>new Response('<html>error</html>',{headers:{'content-type':'text/html'}}));await a.voice.speak('Тест','ru',1);assert.match(a.errors[0],/формат звука/);assert.equal(a.players.length,0);
+});
