@@ -1,0 +1,6 @@
+[build]
+  publish = "web"
+  functions = "netlify/functions"
+
+# API routes are defined by netlify/functions/api.mjs config.
+# Avoid a redirect to a nonexistent /.netlify/functions/api/* path.
