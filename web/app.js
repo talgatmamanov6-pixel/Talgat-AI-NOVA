@@ -58,17 +58,28 @@ async function check(){
   }catch(e){$("status").textContent="● API недоступен: "+e.message}
 }
 check();
+let neuralVoice=null,neuralConfigured=false;
+async function checkNeural(){try{const r=await fetch("/api/speech",{cache:"no-store"});const d=await r.json();neuralConfigured=r.ok&&d.configured===true;$("neural-status").textContent=neuralConfigured?"Нейронный голос подключён · Cedar":"Нейронный голос: требуется подключение сервиса"}catch{$("neural-status").textContent="Не удалось проверить нейронную озвучку"}}
+checkNeural();
+function stopOutput(){neuralVoice?.stop();window.speechSynthesis?.cancel?.()}
 function say(source){
-  if(!voice||!("speechSynthesis" in window))return;
-  speechSynthesis.cancel();
+  if(!voice)return;
+  if(recognition){recordingToken++;recognition.abort?.();recognition=null}
+  stopOutput();
   const text=source.replace(/```[\s\S]*?```/g," Фрагмент кода на экране. ").replace(/\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\s)[^$\n]+?\$/g," Формула на экране. ").replace(/\[([^\]]+)\]\([^)]+\)/g,"$1").replace(/[`*_#~]/g," ").slice(0,4000);
+  if(prefs.engine==='neural'){
+    if(!neuralConfigured){stopVoiceSession();$("status").textContent="Нейронный голос ещё не подключён. Откройте настройки голоса.";return}
+    if(!neuralVoice)neuralVoice=new TalgatNeural.NeuralVoice({fetch:(...args)=>fetch(...args),Audio:window.Audio,createURL:blob=>URL.createObjectURL(blob),revokeURL:url=>URL.revokeObjectURL(url),onState:state=>{document.body.dataset.state=state==='preparing'?'thinking':'speaking';$("status").textContent=state==='preparing'?"Готовлю голосовой ответ…":"Отвечаю · нейронный голос"},onEnd:()=>{document.body.dataset.state='idle';if(voiceSession)startListening();else check()},onError:e=>{stopVoiceSession();$("status").textContent=e.message}});
+    neuralVoice.speak(text,prefs.language||'ru',Number($("voice-rate").value)||1);return;
+  }
+  if(!('speechSynthesis' in window)){$("status").textContent="Голос устройства недоступен.";return}
   const u=new SpeechSynthesisUtterance(text);
-  u.lang="ru-RU";u.rate=Number($("voice-rate").value)||0.95;
-  u.onstart=()=>{document.body.dataset.state="speaking"};
-  u.onend=()=>{document.body.dataset.state="idle";if(voiceSession)startListening()};
+  u.lang=({ru:"ru-RU",kk:"kk-KZ",en:"en-US"})[prefs.language]||"ru-RU";u.rate=Number($("voice-rate").value)||0.95;
+  u.onstart=()=>{document.body.dataset.state="speaking";$("status").textContent="Отвечаю · голос устройства"};
+  u.onend=()=>{document.body.dataset.state="idle";if(voiceSession)startListening();else check()};
   u.onerror=e=>{document.body.dataset.state="idle";if(voiceSession)stopVoiceSession();if(!["interrupted","canceled"].includes(e.error))$("status").textContent=speechError(e.error)};
   const voices=speechSynthesis.getVoices();
-  u.voice=voices.find(v=>v.lang.toLowerCase().startsWith("ru"))||null;
+  u.voice=voices.find(v=>v.lang.toLowerCase().startsWith(prefs.language||"ru"))||null;
   speechSynthesis.speak(u);
 }
 async function send(prepared){
@@ -83,7 +94,7 @@ async function send(prepared){
   const pending=add("assistant","Думаю…");
   const timeout=setTimeout(()=>controller?.abort(),35000);
   try{
-    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",mode:workMode,materials:attachments.map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
+    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,materials:attachments.map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
     const d=await readJson(r);
     if(!r.ok)throw new Error(d.error||"HTTP "+r.status);
     if(typeof d.answer!=="string"||!d.answer.trim())throw new Error("Модель вернула пустой ответ");
@@ -100,11 +111,11 @@ async function send(prepared){
 $("send").addEventListener("click",send);
 $("question").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});
 $("voice").addEventListener("click",()=>{
-  if(!("speechSynthesis" in window)){alert("Озвучка недоступна в этом браузере");return}
+  if(prefs.engine!=="neural"&&!("speechSynthesis" in window)){alert("Озвучка недоступна в этом браузере");return}
   voice=!voice;$("voice").textContent=voice?"◉ Озвучка: вкл.":"◉ Озвучка: выкл.";
-  $("voice").setAttribute("aria-pressed",String(voice));if(!voice){stopVoiceSession();speechSynthesis.cancel();document.body.dataset.state="idle"}
+  $("voice").setAttribute("aria-pressed",String(voice));if(!voice){stopVoiceSession();stopOutput();document.body.dataset.state="idle"}
 });
-$("stop").addEventListener("click",()=>{stopVoiceSession();controller?.abort();window.window.speechSynthesis?.cancel?.();document.body.dataset.state="idle";recognition?.stop?.()});
+$("stop").addEventListener("click",()=>{stopVoiceSession();controller?.abort();stopOutput();document.body.dataset.state="idle";recognition?.stop?.()});
 const actions=document.querySelector(".buttons");
 const clear=document.createElement("button");clear.className="secondary";clear.textContent="Очистить историю";
 clear.onclick=()=>{if(busy)return;stopVoiceSession();history=[];save();$("chat").replaceChildren();document.body.classList.remove("has-chat");document.body.dataset.state="idle";window.speechSynthesis?.cancel?.();document.body.classList.remove("nav-open")};
@@ -112,9 +123,9 @@ $("newchat").onclick=clear.onclick;
 // Audio is recorded locally and transcribed by the protected server endpoint.
 const talk=document.createElement("button");talk.className="navitem";talk.textContent="◉  Голосовой режим";talk.id="voice-dialog";talk.setAttribute("aria-pressed","false");$("settings-open").before(talk);
 function stopVoiceSession(){
- voiceSession=false;recordingToken++;voiceController?.abort();voiceController=null;
+ voiceSession=false;recordingToken++;neuralVoice?.stop();voiceController?.abort();voiceController=null;
  talk.textContent="◉  Голосовой режим";talk.setAttribute("aria-pressed","false");recognition?.abort?.();recognition=null;
- $("stage-voice").lastElementChild.textContent="Начать разговор";document.body.dataset.state="idle";document.documentElement.style.setProperty("--audiolevel","0");
+ $("stage-voice").lastElementChild.textContent="Начать разговор";document.body.dataset.state="idle";$("status").textContent="Разговор завершён";document.documentElement.style.setProperty("--audiolevel","0");
 }
 function startListening(){if(voiceSession&&!busy&&!recognition)captureVoice(false)}
 async function captureVoice(dictation){
@@ -138,7 +149,7 @@ async function captureVoice(dictation){
    if(!spoken){$("status").textContent="Речь не обнаружена";if(voiceSession)setTimeout(startListening,700);return}
    const blob=new Blob(chunks,{type:recorder.mimeType||'audio/webm'});if(blob.size>4000000){stopVoiceSession();$("status").textContent="Слишком длинная запись. Говорите короткими репликами.";return}
    document.body.dataset.state="transcribing";$("status").textContent="Распознаю речь…";
-   const form=new FormData();const ext=blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm';form.append('file',blob,'voice.'+ext);
+   const form=new FormData();const ext=blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm';form.append('file',blob,'voice.'+ext);form.append('language',prefs.language||'ru');
    voiceController=new AbortController();const deadline=setTimeout(()=>voiceController?.abort(),30000);
    try{
     const res=await fetch('/api/transcribe',{method:'POST',body:form,signal:voiceController.signal});const data=await readJson(res);
@@ -158,8 +169,8 @@ async function captureVoice(dictation){
  }catch(e){cleanup();recognition=null;if(token===recordingToken){stopVoiceSession();$("status").textContent=e.name==='NotAllowedError'?'Разрешите доступ к микрофону в настройках браузера.':e.name==='NotFoundError'?'Микрофон не найден.':'Не удалось включить запись микрофона.'}}
 }
 talk.onclick=()=>{
- if(voiceSession){stopVoiceSession();window.speechSynthesis?.cancel?.();check();return}
- if(!('speechSynthesis' in window)){$("status").textContent="Озвучка недоступна. Можно использовать диктовку.";return}
+ if(voiceSession){stopVoiceSession();stopOutput();check();return}
+ if(prefs.engine==='neural'&&!neuralConfigured){$("status").textContent="Нейронный голос ещё не подключён. Откройте настройки голоса.";$("settings").showModal();return}if(prefs.engine!=='neural'&&!('speechSynthesis' in window)){$("status").textContent="Озвучка недоступна. Можно использовать диктовку.";return}
  voiceSession=true;voice=true;$("voice").textContent="◉ Озвучка: вкл.";$("voice").setAttribute('aria-pressed','true');talk.textContent="■  Завершить разговор";talk.setAttribute('aria-pressed','true');
  $("stage-voice").lastElementChild.textContent="Завершить разговор";document.body.classList.remove('nav-open');startListening();
 };
@@ -186,17 +197,19 @@ for(const mode of ['chat','code'])$("mode-"+mode).onclick=()=>{workMode=mode;for
 const fitViewport=()=>document.documentElement.style.setProperty('--appheight',(window.visualViewport?.height||innerHeight)+'px');window.visualViewport?.addEventListener('resize',fitViewport);window.addEventListener('resize',fitViewport);fitViewport();
 // Local preferences never contain provider credentials.
 const prefsKey="talgat-ui-preferences";
-let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:""};
+let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device"};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
   document.body.classList.toggle("light",prefs.theme==="light");
   document.documentElement.style.setProperty("--size",Math.max(14,Math.min(20,Number(prefs.font)||16))+"px");
+  $("speech-engine").value=prefs.engine==="neural"?"neural":"device";
+  $("speech-language").value=["ru","kk","en"].includes(prefs.language)?prefs.language:"ru";
   $("theme").value=prefs.theme==="light"?"light":"dark";
   $("memory").value=typeof prefs.memory==="string"?prefs.memory:"";$("font-size").value=prefs.font;$("voice-rate").value=prefs.rate;$("motion").value=prefs.motion;
   try{localStorage.setItem(prefsKey,JSON.stringify(prefs))}catch{}
 }
 applyPrefs();
-for(const [id,key] of [["theme","theme"],["font-size","font"],["voice-rate","rate"],["motion","motion"],["memory","memory"]])$(id).addEventListener("input",()=>{prefs[key]=$(id).value;applyPrefs()});
+for(const [id,key] of [["speech-engine","engine"],["speech-language","language"],["theme","theme"],["font-size","font"],["voice-rate","rate"],["motion","motion"],["memory","memory"]])$(id).addEventListener("input",()=>{prefs[key]=$(id).value;applyPrefs()});
 $("settings-open").onclick=()=>{$("settings").showModal();document.body.classList.remove("nav-open")};
 $("settings-close").onclick=()=>$("settings").close();
 $("settings").addEventListener("click",e=>{if(e.target===$("settings")){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close()}});

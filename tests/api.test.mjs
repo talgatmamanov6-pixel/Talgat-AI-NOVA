@@ -78,3 +78,7 @@ test('supported arithmetic quiz bypasses language model and does not expose cred
  setKey('test-secret');const original=globalThis.fetch;globalThis.fetch=()=>{throw new Error('No LLM expected')};
  try{const res=await handler(request('/api/chat','POST',{message:'/quiz сложение дробей с одинаковым знаменателем'}));const data=await res.json();assert.equal(res.status,200);assert.equal(data.engine,'exact-rational-arithmetic');assert.equal(data.answer.includes('test-secret'),false)}finally{globalThis.fetch=original}
 });
+test('voice conversation fixes default language independently of foreign history',async()=>{
+ setKey('test-secret');const original=globalThis.fetch;globalThis.fetch=async(url,options)=>{const system=JSON.parse(options.body).messages[0].content;assert.match(system,/на русском языке/);assert.match(system,/Не переключай язык/);assert.match(system,/Голосовой разговор/);return Response.json({choices:[{message:{content:'Я на связи. Что нужно сделать?'}}]})};
+ try{const r=await handler(request('/api/chat','POST',{message:'Ты меня слышишь?',interaction:'voice',history:[{role:'assistant',content:'Svo setningin pin'}]}));assert.equal(r.status,200)}finally{globalThis.fetch=original}
+});

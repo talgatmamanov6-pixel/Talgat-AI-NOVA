@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import speech from '../netlify/functions/speech.mjs';
+const request=(method,body)=>new Request('https://site/api/speech',{method,...(body?{body:JSON.stringify(body),headers:{'content-type':'application/json'}}:{})});
+test('voice status exposes only availability, not a key',async()=>{globalThis.Netlify={env:{get:()=>undefined}};assert.deepEqual(await (await speech(request('GET'))).json(),{configured:false,engine:'openai-neural',voice:'cedar'});assert.equal((await speech(request('POST',{text:'Тест'}))).status,503)});
+test('voice uses protected server credentials and returns binary audio',async()=>{
+ globalThis.Netlify={env:{get:()=> 'server-secret'}};const original=globalThis.fetch;globalThis.fetch=async(input,options)=>{const req=input instanceof Request?input:new Request(input,options);assert.equal(new URL(req.url).origin,'https://api.openai.com');assert.equal(req.headers.get('authorization'),'Bearer server-secret');const body=await req.json();assert.equal(body.voice,'cedar');assert.equal(body.input,'Привет, Талгат.');return new Response(new Uint8Array([73,68,51,1,2,3]),{headers:{'content-type':'audio/mpeg'}})};
+ try{const r=await speech(request('POST',{text:'Привет, Талгат.',language:'ru'}));assert.equal(r.status,200);assert.equal(r.headers.get('content-type'),'audio/mpeg');assert.equal((await r.arrayBuffer()).byteLength,6);assert.equal((await speech(request('POST',{text:'x'.repeat(1201)}))).status,400)}finally{globalThis.fetch=original}
+});
