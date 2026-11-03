@@ -36,7 +36,7 @@ window.TalgatWorkspace={decorate,csv};
 function choose(skill){selected=skill;get('skill-name').textContent=skill.title;get('skill-command').textContent='/'+skill.id;get('skill-description').textContent=skill.description;get('skill-id').value=skill.id;get('skill-feedback').textContent='';drawList()}
 function drawList(){
  const query=get('skill-search').value.toLowerCase().trim();const items=catalog.items.filter(s=>(category==='Все'||s.category===category)&&(s.title+' '+s.id+' '+s.description).toLowerCase().includes(query));
- get('skill-count').textContent=items.length+' сценариев';get('skill-list').replaceChildren();
+ get('skill-count').textContent='Найдено: '+items.length;get('skill-list').replaceChildren();
  for(const skill of items){const button=document.createElement('button');button.className='skill-card'+(skill.id===selected.id?' chosen':'');button.type='button';button.setAttribute('aria-pressed',String(skill.id===selected.id));const label=document.createElement('strong');label.textContent=skill.title;const sub=document.createElement('small');sub.textContent='/'+skill.id+' · '+skill.category;button.append(label,sub);button.onclick=()=>choose(skill);get('skill-list').append(button)}
  if(!items.length)get('skill-list').textContent='Ничего не найдено. Измените запрос.';
 }
@@ -46,7 +46,7 @@ for(const value of ['Все',...new Set(catalog.items.map(s=>s.category))]){cons
 get('skill-form').onsubmit=e=>{
  e.preventDefault();if(busy){get('skill-feedback').textContent='Дождитесь текущего ответа или нажмите «Стоп».';return}
  const prompt=catalog.build(selected.id,{topic:get('skill-topic').value,audience:get('skill-audience').value,scope:get('skill-scope').value,language:get('skill-language').value});
- get('question').value=prompt;get('skills').close();if(selected.category==='Разработка')get('mode-code').click();else get('mode-chat').click();send();
+ get('question').value=prompt;get('skills').close();if(selected.category==='Разработка')get('mode-code').click();else get('mode-chat').click();send({prompt,display:'/'+selected.id+' '+get('skill-topic').value+'\n'+[get('skill-audience').value,get('skill-scope').value,get('skill-language').value].filter(Boolean).join(' · ')});
 };
 // Slash commands go through the same recipe as the form. No command executes code.
 window.TalgatCommand=question=>{const match=catalog.expand(question);if(!match)return question;if(!match.prompt){open(match.skill.id);get('skill-topic').focus();return null}if(match.skill.category==='Разработка')get('mode-code').click();return match.prompt};

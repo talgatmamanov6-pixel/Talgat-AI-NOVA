@@ -25,3 +25,8 @@ test('microphone denial ends session with a readable message',async()=>{
 test('stopped recording cannot send a stale transcript to chat',async()=>{
  const a=setup();await settle();vm.runInContext('talk.onclick()',a.context);await settle();vm.runInContext('stopVoiceSession()',a.context);await settle();assert.equal(a.calls.some(c=>c.url==='/api/chat'),false);
 });
+test('configured task sends its prompt once and stores a concise user message',async()=>{
+ const a=setup();await settle();a.context.TalgatCommand=()=>{throw new Error('A prepared task must not be expanded again')};
+ await vm.runInContext('send({prompt:"/lesson-plan — full configured task\\n6 класс, 20 минут",display:"/lesson-plan Дроби · 20 минут"})',a.context);
+ const chat=a.calls.find(c=>c.url==='/api/chat');assert.equal(JSON.parse(chat.opts.body).message,'/lesson-plan — full configured task\n6 класс, 20 минут');assert.equal(vm.runInContext('history[0].content',a.context),'/lesson-plan Дроби · 20 минут');
+});

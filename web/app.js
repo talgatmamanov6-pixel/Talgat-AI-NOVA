@@ -71,12 +71,13 @@ function say(source){
   u.voice=voices.find(v=>v.lang.toLowerCase().startsWith("ru"))||null;
   speechSynthesis.speak(u);
 }
-async function send(){
-  let question=$("question").value.trim();
+async function send(prepared){
+  let question=typeof prepared?.prompt==="string"?prepared.prompt:$("question").value.trim();
+  const visibleQuestion=typeof prepared?.display==="string"?prepared.display:question;
   if(!question||busy)return;
-  question=window.TalgatCommand?window.TalgatCommand(question):question;if(!question)return;
+  if(typeof prepared?.prompt!=="string")question=window.TalgatCommand?window.TalgatCommand(question):question;if(!question)return;
   const previous=history.slice(-12);
-  add("user",question);$("question").value="";
+  add("user",visibleQuestion);$("question").value="";
   busy=true;document.body.dataset.state="thinking";$("send").disabled=true;
   controller=new AbortController();
   const pending=add("assistant","Думаю…");
@@ -87,7 +88,7 @@ async function send(){
     if(!r.ok)throw new Error(d.error||"HTTP "+r.status);
     if(typeof d.answer!=="string"||!d.answer.trim())throw new Error("Модель вернула пустой ответ");
     pending.remove();add("assistant",d.answer);
-    history.push({role:"user",content:question},{role:"assistant",content:d.answer});save();say(d.answer);
+    history.push({role:"user",content:visibleQuestion},{role:"assistant",content:d.answer});save();say(d.answer);
   }catch(e){
     pending.remove();
     const detail=e.name==="AbortError"?"Превышено время ожидания или запрос остановлен.":e instanceof TypeError?"Не удалось подключиться к API. Проверьте интернет и публикацию /api/chat.":e.message;
