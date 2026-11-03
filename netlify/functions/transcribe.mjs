@@ -21,7 +21,7 @@ export default async function transcribe(request){
   const segments=Array.isArray(data.segments)?data.segments:[];
   const uncertain=segments.length>0&&segments.every(s=>s.no_speech_prob>0.75||s.avg_logprob < -1.2);
   const wrongScript=language==='ru'&&(text.match(/[a-zA-ZÀ-ž]/g)||[]).length>18&&!/[А-Яа-яЁё]/.test(text);
-  if(uncertain||wrongScript)return json({error:'Не удалось уверенно разобрать русскую речь. Повторите фразу ближе к микрофону.',code:'uncertain_transcript'},422);
+  if(uncertain||wrongScript)return json({error:'Не удалось уверенно разобрать речь. Повторите фразу ближе к микрофону.',code:'uncertain_transcript'},422);
   if(!text)return json({error:'Речь не обнаружена. Попробуйте говорить ближе к микрофону.'},422);
   return json({text,language,provider:'groq',model});
  }catch(e){return json({error:e.name==='AbortError'?'Распознавание заняло слишком много времени.':'Сервис распознавания временно недоступен.'},e.name==='AbortError'?504:502)}finally{clearTimeout(timer)}

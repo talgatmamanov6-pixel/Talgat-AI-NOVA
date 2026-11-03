@@ -13,13 +13,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
       - name: Check JavaScript syntax
         run: |
           node --check netlify/functions/api.mjs
-          node --check web/app.js
           node --check netlify/functions/transcribe.mjs
-      - name: Test API behavior (mocked Groq)
-        run: node --test tests/*.test.*
+          node --check netlify/functions/speech.mjs
+          node --check web/app.js
+          node --check web/neural-voice.js
+      - name: Test API and voice behavior
+        run: npm test
       - name: Verify PWA files
         run: |
           test -s web/index.html
