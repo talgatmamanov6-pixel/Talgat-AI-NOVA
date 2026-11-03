@@ -22,7 +22,7 @@ export default async function handler(request){
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),25000);
   try{
-    const upstream=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+    let upstream=await fetch("https://api.groq.com/openai/v1/chat/completions",{
       method:"POST",signal:controller.signal,
       headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -30,12 +30,28 @@ export default async function handler(request){
         messages:[{role:"system",content:"Ты Talgat AI 2.0, интеллектуальный помощник. Отвечай самостоятельно, по существу, на языке пользователя. Используй корректный Markdown, а для формул LaTeX. Не выдумывай факты, возможности, выполненные действия или ссылки. Если данных недостаточно, сообщай об ограничениях."},...history,{role:"user",content:message}]
       })
     });
+    if(upstream.status===404||upstream.status===410){
+      const available=await fetch("https://api.groq.com/openai/v1/models",{headers:{"Authorization":"Bearer "+key},signal:controller.signal});
+      if(available.ok){
+        const listing=await available.json();
+        const ids=(listing.data||[]).filter(m=>m.active!==false&&typeof m.id==="string").map(m=>m.id);
+        const candidates=["llama-3.3-70b-versatile","openai/gpt-oss-120b","qwen/qwen3-32b","openai/gpt-oss-20b","llama-3.1-8b-instant"].filter(id=>ids.includes(id)&&id!==model);
+        for(const fallback of candidates.slice(0,2)){
+          upstream=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+            method:"POST",signal:controller.signal,
+            headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
+            body:JSON.stringify({model:fallback,max_completion_tokens:2048,messages:[{role:"system",content:"Ты Talgat AI 2.0. Отвечай по существу на языке пользователя. Используй Markdown и LaTeX для формул. Не выдумывай факты или выполненные действия."},...history,{role:"user",content:message}]})
+          });
+          if(upstream.ok||![404,410].includes(upstream.status))break;
+        }
+      }
+    }
     const raw=await upstream.text();
     let data;try{data=JSON.parse(raw)}catch{return json({error:"AI-провайдер вернул ответ не в формате JSON",upstream_status:upstream.status},502)}
     if(!upstream.ok){
       const code=upstream.status;
       const error=code===401?"Ключ AI-провайдера недействителен":code===429?"Превышен лимит запросов к модели":code===400?"Модель или параметры запроса отклонены AI-провайдером":"Ошибка AI-провайдера";
-      return json({error,upstream_status:code},code===429?429:502);
+      return json({error,upstream_status:code,provider_code:typeof data?.error?.code==="string"?data.error.code.replace(/[^a-zA-Z0-9_-]/g,"").slice(0,80):undefined},code===429?429:502);
     }
     const answer=data?.choices?.[0]?.message?.content;
     if(typeof answer!=="string"||!answer.trim())return json({error:"Модель вернула пустой ответ"},502);
