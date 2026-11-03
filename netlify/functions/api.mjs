@@ -1,3 +1,4 @@
+import {verifiedFractionQuiz} from "./fraction-quiz.mjs";
 // Talgat AI 2.0 — server-side Groq proxy. Never expose GROQ_API_KEY to the browser.
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}});
 const getEnv=(name)=>{try{return Netlify.env.get(name)}catch{return undefined}};
@@ -15,6 +16,7 @@ export default async function handler(request){
   try{body=await request.json()}catch{return json({error:"Некорректный JSON в запросе"},400)}
   const message=typeof body?.message==="string"?body.message.trim():"";
   if(!message||message.length>12000)return json({error:"Введите вопрос длиной от 1 до 12000 символов"},400);
+  const verified=verifiedFractionQuiz(message);if(verified)return json(verified);
   const preferences=typeof body?.preferences==="string"?body.preferences.trim().slice(0,2000):"";
   const system="Ты Talgat AI 2.0, интеллектуальный помощник. Отвечай на языке пользователя, ясно, точно и по существу. Не выдумывай факты или выполненные действия. Для обычных ответов используй чистый Markdown без лишних декоративных символов. Формулы оформляй LaTeX строго внутри $...$ или \\( ... \\). Код помещай в тройные обратные кавычки с указанием языка. Не показывай внутренние рассуждения. Учитывай предпочтения пользователя, если они совместимы с задачей: "+preferences;
   const history=(Array.isArray(body.history)?body.history:[])
