@@ -17,3 +17,8 @@ test('hung neural requests time out with a readable error',async()=>{
 test('HTML masquerading as a successful audio response is rejected',async()=>{
  const a=setup(async()=>new Response('<html>error</html>',{headers:{'content-type':'text/html'}}));await a.voice.speak('Тест','ru',1);assert.match(a.errors[0],/формат звука/);assert.equal(a.players.length,0);
 });
+test('sentence mode starts with the first sentence and prefetches only one chunk ahead',async()=>{
+ const calls=[];let prefetchAborted=false;
+ const a=setup(async(url,opts)=>{calls.push(JSON.parse(opts.body));if(calls.length===1)return {ok:true,blob:async()=>new Blob(['audio'],{type:'audio/wav'})};return new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>{prefetchAborted=true;reject(Object.assign(new Error('stopped'),{name:'AbortError'}))}))});
+ a.voice.deps.lowLatency=true;const running=a.voice.speak('Добрый день. Я вас слушаю. Чем помочь?','ru',1,'fish');await settle();assert.equal(calls[0].text,'Добрый день.');assert.equal(calls[0].provider,'fish');assert.equal(calls.length,2);assert.equal(a.players.length,1);a.voice.stop();await running;await settle();assert.equal(prefetchAborted,true);assert.equal(a.players.length,1);assert.equal(a.ended,0);
+});
