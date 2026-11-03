@@ -43,3 +43,7 @@ test('instant speech completion resumes microphone after request busy state clea
 test('invalid persisted preferences are normalized before use',async()=>{
  const a=setup();await settle();vm.runInContext('prefs={font:999,rate:-2,memory:42,language:"bad",engine:"bad",motion:"bad"};applyPrefs()',a.context);assert.equal(vm.runInContext('prefs.font',a.context),20);assert.equal(vm.runInContext('prefs.rate',a.context),.7);assert.equal(vm.runInContext('prefs.language',a.context),'ru');assert.equal(vm.runInContext('prefs.memory',a.context),'');
 });
+test('numeric math is rendered while currency ranges remain unchanged',async()=>{
+ const a=setup();await settle();const seen=[];a.context.katex={renderToString(value){seen.push(value);return '<span>math</span>'}};
+ const result=vm.runInContext('safeMath("$1$ и $3/4$, бюджет $2,000–$5,000")',a.context);assert.deepEqual(seen,['1','3/4']);assert.ok(result.protectedText.includes('$2,000–$5,000'));
+});

@@ -10,7 +10,7 @@ const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(history.slice
 function safeMath(source){
   const tokens=[];
   const protectedText=source.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\s)[^$\n]+?\$)/g,m=>{
-    if(!m.startsWith("$$")&&/^\$\d/.test(m)&&!/[=^_\\]/.test(m))return m;
+    if(!m.startsWith("$$")&&/^\$\d/.test(m)&&!/^\$\d+(?:[.,]\d+)?(?:\s*[\/+*\-]\s*\d+(?:[.,]\d+)?)*\$$/.test(m)&&!/[=^_\\]/.test(m))return m;
     const display=m.startsWith("$$")||m.startsWith("\\[");
     const latex=m.startsWith("$$")?m.slice(2,-2):m.startsWith("\\[")||m.startsWith("\\(")?m.slice(2,-2):m.slice(1,-1);
     let html;
@@ -125,7 +125,7 @@ $("voice").addEventListener("click",()=>{
 $("stop").addEventListener("click",()=>{stopVoiceSession();controller?.abort();stopOutput();document.body.dataset.state="idle";recognition?.stop?.()});
 const actions=document.querySelector(".buttons");
 const clear=document.createElement("button");clear.className="secondary";clear.textContent="Очистить историю";
-clear.onclick=()=>{if(busy)return;stopVoiceSession();history=[];save();$("chat").replaceChildren();document.body.classList.remove("has-chat");document.body.dataset.state="idle";window.speechSynthesis?.cancel?.();document.body.classList.remove("nav-open")};
+clear.onclick=()=>{if(busy)return;stopVoiceSession();history=[];save();$("chat").replaceChildren();document.body.classList.remove("has-chat");document.body.dataset.state="idle";window.speechSynthesis?.cancel?.();closeNavigation()};
 $("newchat").onclick=clear.onclick;
 // Audio is recorded locally and transcribed by the protected server endpoint.
 const talk=document.createElement("button");talk.className="navitem";talk.textContent="◉  Голосовой режим";talk.id="voice-dialog";talk.setAttribute("aria-pressed","false");$("settings-open").before(talk);
@@ -180,7 +180,7 @@ talk.onclick=()=>{
  if(voiceSession){stopVoiceSession();stopOutput();check();return}
  if(prefs.engine==='neural'&&!neuralConfigured){$("status").textContent="Нейронный голос ещё не подключён. Откройте настройки голоса.";$("settings").showModal();return}if(prefs.engine!=='neural'&&!('speechSynthesis' in window)){$("status").textContent="Озвучка недоступна. Можно использовать диктовку.";return}
  stopCapture();stopOutput();voiceSession=true;voice=true;$("voice").textContent="◉ Озвучка: вкл.";$("voice").setAttribute('aria-pressed','true');talk.textContent="■  Завершить разговор";talk.setAttribute('aria-pressed','true');
- $("stage-voice").lastElementChild.textContent="Завершить разговор";document.body.classList.remove('nav-open');startListening();
+ $("stage-voice").lastElementChild.textContent="Завершить разговор";closeNavigation();startListening();
 };
 $("stage-voice").onclick=()=>talk.onclick();
 const mic=document.createElement('button');mic.textContent="🎙 Диктовка";mic.title="Запись и распознавание через Whisper";mic.onclick=()=>{if(recognition){recognition.stop();return}if(voiceSession)stopVoiceSession();captureVoice(true)};actions.append(mic);
@@ -219,11 +219,14 @@ function applyPrefs(){
 }
 applyPrefs();
 for(const [id,key] of [["speech-engine","engine"],["speech-language","language"],["theme","theme"],["font-size","font"],["voice-rate","rate"],["motion","motion"],["memory","memory"]])$(id).addEventListener("input",()=>{prefs[key]=$(id).value;applyPrefs()});
-$("settings-open").onclick=()=>{$("settings").showModal();document.body.classList.remove("nav-open")};
+$("settings-open").onclick=()=>{$("settings").showModal();closeNavigation()};
 $("settings-close").onclick=()=>$("settings").close();
 $("settings").addEventListener("click",e=>{if(e.target===$("settings")){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close()}});
-$("menu").onclick=()=>document.body.classList.toggle("nav-open");
-$("navchat").onclick=()=>document.body.classList.remove("nav-open");
+function updateNavigation(){const mobile=matchMedia('(max-width:700px)').matches,open=document.body.classList.contains?.('nav-open')||false;const sidebar=$('sidebar');sidebar.inert=mobile&&!open;sidebar.setAttribute('aria-hidden',String(mobile&&!open));$('menu').setAttribute('aria-expanded',String(mobile&&open))}
+function closeNavigation(){document.body.classList.remove('nav-open');updateNavigation()}
+window.closeTalgatNavigation=closeNavigation;
+$('menu').onclick=()=>{document.body.classList.toggle('nav-open');updateNavigation()};$('nav-backdrop').onclick=()=>{closeNavigation();$('menu').focus()};window.addEventListener('resize',updateNavigation);document.addEventListener?.('keydown',e=>{if(e.key==='Escape')closeNavigation()});updateNavigation();
+$("navchat").onclick=()=>closeNavigation();
 for(const card of document.querySelectorAll("[data-prompt]"))card.onclick=()=>{$("question").value=card.dataset.prompt;$("question").focus()};
 // A deforming 3D graph: irregular filaments, depth and travelling energy pulses.
 let seed=72831;const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
