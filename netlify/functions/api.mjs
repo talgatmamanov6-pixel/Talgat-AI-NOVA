@@ -6,7 +6,7 @@ export default async function handler(request){
   const key=getEnv("GROQ_API_KEY");
   if(path==="/api/status"){
     if(request.method!=="GET")return json({error:"Method not allowed"},405);
-    return json({ok:true,ai_configured:Boolean(key),version:"2.0-staging",provider:"groq"});
+    return json({ok:true,ai_configured:Boolean(key),version:"2.0",provider:"groq"});
   }
   if(path!=="/api/chat")return json({error:"Not found"},404);
   if(request.method!=="POST")return json({error:"Method not allowed"},405);
@@ -18,7 +18,7 @@ export default async function handler(request){
   const history=(Array.isArray(body.history)?body.history:[])
     .filter(m=>m&&["user","assistant"].includes(m.role)&&typeof m.content==="string")
     .slice(-12).map(m=>({role:m.role,content:m.content.slice(0,8000)}));
-  const model=getEnv("GROQ_MODEL")||"llama-3.3-70b-versatile";
+  const model=getEnv("GROQ_MODEL")||"openai/gpt-oss-120b";
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),25000);
   try{
