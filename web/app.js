@@ -63,12 +63,12 @@ function say(source){
   speechSynthesis.cancel();
   const text=source.replace(/```[\s\S]*?```/g," Фрагмент кода на экране. ").replace(/\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\s)[^$\n]+?\$/g," Формула на экране. ").replace(/\[([^\]]+)\]\([^)]+\)/g,"$1").replace(/[`*_#~]/g," ").slice(0,4000);
   const u=new SpeechSynthesisUtterance(text);
-  u.lang="ru-RU";u.rate=Number($("voice-rate").value)||0.95;
+  u.lang=({ru:"ru-RU",kk:"kk-KZ",en:"en-US"})[prefs.language]||"ru-RU";u.rate=Number($("voice-rate").value)||0.95;
   u.onstart=()=>{document.body.dataset.state="speaking"};
   u.onend=()=>{document.body.dataset.state="idle";if(voiceSession)startListening()};
   u.onerror=e=>{document.body.dataset.state="idle";if(voiceSession)stopVoiceSession();if(!["interrupted","canceled"].includes(e.error))$("status").textContent=speechError(e.error)};
   const voices=speechSynthesis.getVoices();
-  u.voice=voices.find(v=>v.lang.toLowerCase().startsWith("ru"))||null;
+  u.voice=voices.find(v=>v.lang.toLowerCase().startsWith(prefs.language||"ru"))||null;
   speechSynthesis.speak(u);
 }
 async function send(prepared){
@@ -83,7 +83,7 @@ async function send(prepared){
   const pending=add("assistant","Думаю…");
   const timeout=setTimeout(()=>controller?.abort(),35000);
   try{
-    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",mode:workMode,materials:attachments.map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
+    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,materials:attachments.map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
     const d=await readJson(r);
     if(!r.ok)throw new Error(d.error||"HTTP "+r.status);
     if(typeof d.answer!=="string"||!d.answer.trim())throw new Error("Модель вернула пустой ответ");
@@ -138,7 +138,7 @@ async function captureVoice(dictation){
    if(!spoken){$("status").textContent="Речь не обнаружена";if(voiceSession)setTimeout(startListening,700);return}
    const blob=new Blob(chunks,{type:recorder.mimeType||'audio/webm'});if(blob.size>4000000){stopVoiceSession();$("status").textContent="Слишком длинная запись. Говорите короткими репликами.";return}
    document.body.dataset.state="transcribing";$("status").textContent="Распознаю речь…";
-   const form=new FormData();const ext=blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm';form.append('file',blob,'voice.'+ext);
+   const form=new FormData();const ext=blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm';form.append('file',blob,'voice.'+ext);form.append('language',prefs.language||'ru');
    voiceController=new AbortController();const deadline=setTimeout(()=>voiceController?.abort(),30000);
    try{
     const res=await fetch('/api/transcribe',{method:'POST',body:form,signal:voiceController.signal});const data=await readJson(res);
@@ -186,17 +186,18 @@ for(const mode of ['chat','code'])$("mode-"+mode).onclick=()=>{workMode=mode;for
 const fitViewport=()=>document.documentElement.style.setProperty('--appheight',(window.visualViewport?.height||innerHeight)+'px');window.visualViewport?.addEventListener('resize',fitViewport);window.addEventListener('resize',fitViewport);fitViewport();
 // Local preferences never contain provider credentials.
 const prefsKey="talgat-ui-preferences";
-let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:""};
+let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru"};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
   document.body.classList.toggle("light",prefs.theme==="light");
   document.documentElement.style.setProperty("--size",Math.max(14,Math.min(20,Number(prefs.font)||16))+"px");
+  $("speech-language").value=["ru","kk","en"].includes(prefs.language)?prefs.language:"ru";
   $("theme").value=prefs.theme==="light"?"light":"dark";
   $("memory").value=typeof prefs.memory==="string"?prefs.memory:"";$("font-size").value=prefs.font;$("voice-rate").value=prefs.rate;$("motion").value=prefs.motion;
   try{localStorage.setItem(prefsKey,JSON.stringify(prefs))}catch{}
 }
 applyPrefs();
-for(const [id,key] of [["theme","theme"],["font-size","font"],["voice-rate","rate"],["motion","motion"],["memory","memory"]])$(id).addEventListener("input",()=>{prefs[key]=$(id).value;applyPrefs()});
+for(const [id,key] of [["speech-language","language"],["theme","theme"],["font-size","font"],["voice-rate","rate"],["motion","motion"],["memory","memory"]])$(id).addEventListener("input",()=>{prefs[key]=$(id).value;applyPrefs()});
 $("settings-open").onclick=()=>{$("settings").showModal();document.body.classList.remove("nav-open")};
 $("settings-close").onclick=()=>$("settings").close();
 $("settings").addEventListener("click",e=>{if(e.target===$("settings")){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close()}});
