@@ -40,7 +40,7 @@ function add(role,source){
   render(el,role,source);
   $("chat").append(el);
   document.body.classList.add("has-chat");
-  if(role==="assistant"&&source!=="Думаю…"){const bar=document.createElement("div");bar.className="messageactions";const copy=document.createElement("button");copy.textContent="Копировать";copy.onclick=async()=>{try{await navigator.clipboard.writeText(source);copy.textContent="Скопировано"}catch{copy.textContent="Копирование недоступно"}};const read=document.createElement("button");read.textContent="Озвучить";read.onclick=()=>{voice=true;$("voice").textContent="◉ Озвучка: вкл.";say(source)};bar.append(copy,read);el.append(bar)}
+  if(role==="assistant"&&source!=="Думаю…"){const bar=document.createElement("div");bar.className="messageactions";const copy=document.createElement("button");copy.textContent="Копировать";copy.onclick=async()=>{try{await navigator.clipboard.writeText(source);copy.textContent="Скопировано"}catch{copy.textContent="Копирование недоступно"}};const read=document.createElement("button");read.textContent="Озвучить";read.onclick=()=>{voice=true;$("voice").textContent="◉ Озвучка: вкл.";say(source)};bar.append(copy,read);el.append(bar);window.TalgatWorkspace?.decorate(el,source)}
   $("chat").scrollTop=$("chat").scrollHeight;
   return el;
 }
@@ -72,8 +72,9 @@ function say(source){
   speechSynthesis.speak(u);
 }
 async function send(){
-  const question=$("question").value.trim();
+  let question=$("question").value.trim();
   if(!question||busy)return;
+  question=window.TalgatCommand?window.TalgatCommand(question):question;if(!question)return;
   const previous=history.slice(-12);
   add("user",question);$("question").value="";
   busy=true;document.body.dataset.state="thinking";$("send").disabled=true;
