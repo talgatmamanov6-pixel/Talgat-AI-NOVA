@@ -15,6 +15,8 @@ export default async function handler(request){
   try{body=await request.json()}catch{return json({error:"Некорректный JSON в запросе"},400)}
   const message=typeof body?.message==="string"?body.message.trim():"";
   if(!message||message.length>12000)return json({error:"Введите вопрос длиной от 1 до 12000 символов"},400);
+  const preferences=typeof body?.preferences==="string"?body.preferences.trim().slice(0,2000):"";
+  const system="Ты Talgat AI 2.0, интеллектуальный помощник. Отвечай на языке пользователя, ясно, точно и по существу. Не выдумывай факты или выполненные действия. Для обычных ответов используй чистый Markdown без лишних декоративных символов. Формулы оформляй LaTeX строго внутри $...$ или \\( ... \\). Код помещай в тройные обратные кавычки с указанием языка. Не показывай внутренние рассуждения. Учитывай предпочтения пользователя, если они совместимы с задачей: "+preferences;
   const history=(Array.isArray(body.history)?body.history:[])
     .filter(m=>m&&["user","assistant"].includes(m.role)&&typeof m.content==="string")
     .slice(-12).map(m=>({role:m.role,content:m.content.slice(0,8000)}));
@@ -27,7 +29,7 @@ export default async function handler(request){
       headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
       body:JSON.stringify({
         model,max_tokens:2048,temperature:0.4,
-        messages:[{role:"system",content:"Ты Talgat AI 2.0, интеллектуальный помощник. Отвечай самостоятельно, по существу, на языке пользователя. Используй корректный Markdown, а для формул LaTeX. Не выдумывай факты, возможности, выполненные действия или ссылки. Если данных недостаточно, сообщай об ограничениях."},...history,{role:"user",content:message}]
+        messages:[{role:"system",content:system},...history,{role:"user",content:message}]
       })
     });
     if(upstream.status===404||upstream.status===410){
@@ -40,7 +42,7 @@ export default async function handler(request){
           upstream=await fetch("https://api.groq.com/openai/v1/chat/completions",{
             method:"POST",signal:controller.signal,
             headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
-            body:JSON.stringify({model:fallback,max_completion_tokens:2048,messages:[{role:"system",content:"Ты Talgat AI 2.0. Отвечай по существу на языке пользователя. Используй Markdown и LaTeX для формул. Не выдумывай факты или выполненные действия."},...history,{role:"user",content:message}]})
+            body:JSON.stringify({model:fallback,max_completion_tokens:2048,messages:[{role:"system",content:system},...history,{role:"user",content:message}]})
           });
           if(upstream.ok||![404,410].includes(upstream.status))break;
         }
