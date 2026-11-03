@@ -103,7 +103,7 @@ async function send(prepared){
   const pending=add("assistant","Думаю…");
   const timeout=setTimeout(()=>controller?.abort(),35000);
   try{
-    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,materials:attachments.map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
+    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,search:Boolean($("web-search").checked),image:attachments[0]?.image,materials:attachments.filter(f=>f.text).map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
     const d=await readJson(r);
     if(!r.ok)throw new Error(d.error||"HTTP "+r.status);
     if(typeof d.answer!=="string"||!d.answer.trim())throw new Error("Модель вернула пустой ответ");
@@ -197,11 +197,35 @@ function renderAttachments(){
  $("attachments").replaceChildren();for(const [i,file] of attachments.entries()){const chip=document.createElement('span');chip.className='file-chip';chip.textContent=file.name;const remove=document.createElement('button');remove.textContent='×';remove.setAttribute('aria-label','Убрать '+file.name);remove.onclick=()=>{attachments.splice(i,1);renderAttachments()};chip.append(remove);$("attachments").append(chip)}
 }
 $("attach").onclick=()=>$("file-input").click();
+let fileVersion=0;
 $("file-input").onchange=async e=>{
  const file=e.target.files[0];e.target.value='';if(!file)return;
- if(!/\.(txt|md|json|csv|js|ts|py|html|css|xml|yaml|yml)$/i.test(file.name)||file.size>200000){$("status").textContent="Поддерживаются текстовые файлы до 200 КБ. PDF и изображения пока не подключены.";return}
- let text;try{text=await file.text()}catch{$("status").textContent="Не удалось прочитать файл. Выберите его заново.";return}if(text.length>24000){$("status").textContent="Материал длиннее 24 000 символов. Выберите меньший фрагмент.";return}
- attachments=[{name:file.name,text}];renderAttachments();$("status").textContent="Материал будет отправлен вместе с вопросом";
+ const version=++fileVersion;
+ $("status").textContent="Читаю файл…";
+ try{
+  const {readFile}=await import('/generated/files.mjs');
+  const result=await readFile(file);
+  if(version!==fileVersion)return;
+  if(result.image?.length>2_000_000)throw new Error("Фото слишком большое после обработки. Обрежьте лишнее вокруг задания.");
+  attachments=[{name:file.name,...result}];renderAttachments();
+  if(result.image)$("web-search").checked=false;
+  $("status").textContent="Файл готов. Напишите, что нужно сделать.";
+ }catch(error){if(version===fileVersion)$("status").textContent=error.message||"Не удалось прочитать файл."}
+};
+$("school-open").onclick=()=>{
+ $("school").showModal();
+ closeNavigation();
+};
+$("school-form").onsubmit=e=>{
+ e.preventDefault();
+ const grade=$("school-grade").value;
+ const subject=$("school-subject").value.trim();
+ const task=$("school-task").value.trim();
+ if(!subject||!task)return;
+ const book=$("school-book").value.trim();
+ $("question").value="Казахстан, "+(grade==="0"?"предшкольный 0 класс":grade+" класс")+", предмет: "+subject+"."+(book?" Учебник, издание и страница: "+book+".":"")+"\n"+task+"\nОбъясни решение по шагам на уровне класса и проверь ответ.";
+ $("school").close();
+ $("question").focus();
 };
 for(const mode of ['chat','code'])$("mode-"+mode).onclick=()=>{workMode=mode;for(const m of ['chat','code']){$('mode-'+m).classList.toggle('selected',m===mode);$('mode-'+m).setAttribute('aria-pressed',String(m===mode))}$('mode-title').textContent=mode==='code'?'Генерация и разбор кода':'Диалог с Talgat';$('question').placeholder=mode==='code'?'Опишите программу, файл или ошибку…':'Вопрос, задача или идея…'};
 const fitViewport=()=>document.documentElement.style.setProperty('--appheight',(window.visualViewport?.height||innerHeight)+'px');window.visualViewport?.addEventListener('resize',fitViewport);window.addEventListener('resize',fitViewport);fitViewport();
