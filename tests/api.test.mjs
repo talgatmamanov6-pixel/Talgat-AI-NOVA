@@ -2,6 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import handler from "../netlify/functions/api.mjs";
 
+test("code mode includes attached materials without changing system authority",async()=>{
+ globalThis.Netlify={env:{get:()=>"test-secret"}};const original=globalThis.fetch;
+ globalThis.fetch=async(url,options)=>{const sent=JSON.parse(options.body);assert.equal(sent.max_completion_tokens,4096);assert.match(sent.messages[0].content,/Режим разработки/);assert.equal(sent.messages[1].role,'user');assert.match(sent.messages[1].content,/const input = 7/);assert.equal(sent.messages.at(-1).content,'Объясни код');return Response.json({choices:[{message:{content:'Объяснение'}}]})};
+ try{const body=JSON.stringify({message:'Объясни код',mode:'code',materials:'const input = 7'});const res=await handler(new Request('https://site/api/chat',{method:'POST',body}));assert.equal(res.status,200)}finally{globalThis.fetch=original}
+});
+
 const request=(path,method="GET",body)=>new Request("https://example.netlify.app"+path,{method,...(body!==undefined?{headers:{"content-type":"application/json"},body:typeof body==="string"?body:JSON.stringify(body)}:{})});
 const setKey=(value)=>{globalThis.Netlify={env:{get:name=>name==="GROQ_API_KEY"?value:undefined}}};
 
