@@ -3,7 +3,8 @@ const json=(data,status=200)=>Response.json(data,{status,headers:{'cache-control
 const env=name=>{try{return Netlify.env.get(name)}catch{return undefined}};
 export default async function speech(req){
  const openaiKey=env('TALGAT_TTS_API_KEY'),fishKey=env('FISH_API_KEY'),fishVoice=env('FISH_VOICE_ID');
- const providers={openai:{configured:Boolean(openaiKey)},fish:{configured:Boolean(fishKey&&fishVoice),key_set:Boolean(fishKey),voice_set:Boolean(fishVoice)}};
+ const gatewayReady=Boolean(process.env.OPENAI_BASE_URL&&process.env.OPENAI_API_KEY);
+ const providers={openai:{configured:Boolean(openaiKey||gatewayReady)},fish:{configured:Boolean(fishKey&&fishVoice),key_set:Boolean(fishKey),voice_set:Boolean(fishVoice)}};
  if(req.method==='GET')return json({configured:providers.openai.configured||providers.fish.configured,providers});
  if(req.method!=='POST')return json({error:'Используйте POST с текстом.'},405);
  let body;try{body=await req.json()}catch{return json({error:'Некорректный запрос.'},400)}
@@ -25,7 +26,7 @@ export default async function speech(req){
    return new Response(audio,{headers:{'content-type':'audio/mpeg','cache-control':'no-store','x-content-type-options':'nosniff'}});
   }
   const language=({ru:'Russian',kk:'Kazakh',en:'English'})[body?.language]||'Russian';
-  const client=new OpenAI({apiKey:openaiKey,baseURL:'https://api.openai.com/v1',timeout:25000,maxRetries:0});
+  const client=new OpenAI({...(openaiKey?{apiKey:openaiKey,baseURL:'https://api.openai.com/v1'}:{}),timeout:25000,maxRetries:0});
   const audio=await client.audio.speech.create({model:'gpt-4o-mini-tts',voice:'cedar',input:text,response_format:'mp3',instructions:'Speak '+language+' naturally, as a calm intelligent male assistant. Warm resonant voice, clear diction, conversational phrasing, natural pauses. No announcer or theatrical delivery. Do not add words.'},{signal:controller.signal});
   return new Response(await audio.arrayBuffer(),{headers:{'content-type':'audio/mpeg','cache-control':'no-store','x-content-type-options':'nosniff'}});
  }catch(e){return json({error:e.name==='AbortError'?'Превышено время ожидания озвучки.':e.status===401?'Ключ сервиса озвучки отклонён.':e.status===429?'Лимит или баланс сервиса озвучки исчерпан.':'Сервис нейронной озвучки временно недоступен.'},e.status===429?429:502)}finally{clearTimeout(timer)}

@@ -38,7 +38,7 @@ export default async function handler(request){
     messages.at(-1).content=[{type:"text",text:message+" Сначала прочитай условие на фото. Если фрагмент неразборчив, попроси уточнить его."},{type:"image_url",image_url:{url:image}}];
   }
   if(search){
-    messages[0].content+=" Используй веб-поиск для проверки источников. Для школьной программы Казахстана ищи по предмету, классу, названию и изданию учебника. Предпочитай официальные порталы Казахстана и издателей. Дай ссылки на использованные страницы. Если конкретное издание не найдено, скажи об этом прямо.";
+    messages.splice(0,messages.length,{role:"system",content:"Ответь на "+language+" языке. Найди до трёх подходящих источников. Для школьных учебников Казахстана предпочитай издателей и официальные сайты. Приводи только ссылки из результатов поиска. Укажи, если нужное издание не найдено."},{role:"user",content:message.slice(0,3000)});
   }
   const model=image?"qwen/qwen3.8-27b":search?"openai/gpt-oss-20b":getEnv("GROQ_MODEL")||"openai/gpt-oss-120b";
   const controller=new AbortController();
@@ -48,8 +48,8 @@ export default async function handler(request){
       method:"POST",signal:controller.signal,
       headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},
       body:JSON.stringify({
-        model,max_completion_tokens:4096,temperature:search?1:0.4,
-        ...(search?{tools:[{type:"browser_search"}],tool_choice:"required"}:{}),
+        model,max_completion_tokens:search?2048:4096,temperature:search?1:0.4,
+        ...(search?{tools:[{type:"browser_search"}],tool_choice:"required",reasoning_effort:"low"}:{}),
         messages
       })
     });
