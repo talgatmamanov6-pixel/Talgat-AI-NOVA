@@ -166,7 +166,7 @@ function addCodeDownloads(el){
  for(const [index,code] of [...el.querySelectorAll('pre code')].entries()){
   const ext=({javascript:'js',typescript:'ts',python:'py',html:'html',css:'css',json:'json',bash:'sh',shell:'sh',sql:'sql',java:'java',cpp:'cpp',csharp:'cs',yaml:'yml'})[(code.className.match(/language-([a-z]+)/)||[])[1]]||'txt';
   const bar=document.createElement('div');bar.className='codeactions';const label=document.createElement('span');label.textContent='talgat-code-'+(index+1)+'.'+ext;
-  const download=document.createElement('button');download.textContent='Скачать файл ↓';download.onclick=()=>{const url=URL.createObjectURL(new Blob([code.textContent],{type:'text/plain;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=label.textContent;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};bar.append(label,download);code.parentElement.before(bar);
+  const download=document.createElement('button');download.textContent='Скачать файл ↓';download.onclick=()=>{const form=document.createElement('form');form.method='POST';form.action='/api/export';form.style.display='none';for(const [name,value] of [['filename',label.textContent],['content',code.textContent]]){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.append(input)}document.body.append(form);form.submit();setTimeout(()=>form.remove(),2000)};bar.append(label,download);code.parentElement.before(bar);
  }
 }
 function renderAttachments(){
