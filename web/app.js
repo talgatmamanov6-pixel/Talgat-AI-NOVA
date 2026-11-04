@@ -82,7 +82,9 @@ function say(source){
   outputActive=true;
   const u=new SpeechSynthesisUtterance(text);
   u.lang=({ru:"ru-RU",kk:"kk-KZ",en:"en-US"})[prefs.language]||"ru-RU";u.rate=Number($("voice-rate").value)||0.95;
-  u.onstart=()=>{if(token!==outputToken)return;document.body.dataset.state="speaking";$("status").textContent="Отвечаю · голос устройства"};
+  const deep=prefs.engine==="deep";
+  if(deep){u.pitch=0.75;u.rate*=0.92}
+  u.onstart=()=>{if(token!==outputToken)return;document.body.dataset.state="speaking";$("status").textContent=deep?"Отвечаю · низкий голос устройства":"Отвечаю · голос устройства"};
   u.onend=()=>{if(token!==outputToken)return;outputActive=false;document.body.dataset.state="idle";if(voiceSession)startListening();else check()};
   u.onerror=e=>{if(token!==outputToken)return;outputActive=false;document.body.dataset.state="idle";if(voiceSession)stopVoiceSession();if(!["interrupted","canceled"].includes(e.error))$("status").textContent=speechError(e.error)};
   const voices=speechSynthesis.getVoices();
@@ -234,7 +236,7 @@ const prefsKey="talgat-ui-preferences";
 let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device"};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
-  prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['neural','fish'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
+  prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['neural','fish','deep'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
   document.body.classList.toggle("light",prefs.theme==="light");
   document.documentElement.style.setProperty("--size",Math.max(14,Math.min(20,Number(prefs.font)||16))+"px");
   $("speech-engine").value=prefs.engine;
