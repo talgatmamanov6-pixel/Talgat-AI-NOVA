@@ -3,17 +3,28 @@ const json=(data,status=200)=>Response.json(data,{status,headers:{'cache-control
 const env=name=>{try{return Netlify.env.get(name)}catch{return undefined}};
 export default async function speech(req){
  const openaiKey=env('TALGAT_TTS_API_KEY'),fishKey=env('FISH_API_KEY'),fishVoice=env('FISH_VOICE_ID');
- const providers={openai:{configured:Boolean(openaiKey)},fish:{configured:Boolean(fishKey&&fishVoice),key_set:Boolean(fishKey),voice_set:Boolean(fishVoice)}};
- if(req.method==='GET')return json({configured:providers.openai.configured||providers.fish.configured,providers});
+ const qwenURL=env('QWEN_VOICE_URL'),qwenToken=env('QWEN_VOICE_TOKEN');
+ const qwenConfigured=Boolean(qwenURL?.startsWith('https://')&&qwenToken);
+ const providers={openai:{configured:Boolean(openaiKey)},fish:{configured:Boolean(fishKey&&fishVoice),key_set:Boolean(fishKey),voice_set:Boolean(fishVoice)},...(qwenConfigured?{qwen:{configured:true}}:{})};
+ if(req.method==='GET')return json({configured:providers.openai.configured||providers.fish.configured||qwenConfigured,providers});
  if(req.method!=='POST')return json({error:'Используйте POST с текстом.'},405);
  let body;try{body=await req.json()}catch{return json({error:'Некорректный запрос.'},400)}
- if(body?.provider!==undefined&&!['fish','openai'].includes(body.provider))return json({error:'Неизвестный сервис озвучки.'},400);
- const provider=body?.provider==='fish'?'fish':'openai';
- if(!providers[provider].configured)return json({error:provider==='fish'?'Fish Audio не подключён. На сервере нужны FISH_API_KEY и идентификатор выбранного голоса FISH_VOICE_ID.':'Нейронный голос OpenAI не подключён. На сервере нужен TALGAT_TTS_API_KEY.',code:'voice_not_configured',provider},503);
+ if(body?.provider!==undefined&&!['fish','openai','qwen'].includes(body.provider))return json({error:'Неизвестный сервис озвучки.'},400);
+ const provider=body?.provider??'openai';
+ if(provider==='qwen'&&!qwenConfigured)return json({error:'Сервер голоса по образцу ещё не подключён.'},503);
+ if(provider==='qwen'&&body.language!=='ru')return json({error:'Голос по образцу поддерживает русский язык.'},400);
+ if(!providers[provider]?.configured)return json({error:provider==='fish'?'Fish Audio не подключён. На сервере нужны FISH_API_KEY и идентификатор выбранного голоса FISH_VOICE_ID.':'Нейронный голос OpenAI не подключён. На сервере нужен TALGAT_TTS_API_KEY.',code:'voice_not_configured',provider},503);
  const text=typeof body?.text==='string'?body.text.trim():'';
  if(!text||text.length>1200)return json({error:'Для озвучки нужен текст от 1 до 1200 символов.'},400);
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),provider==='qwen'?50000:25000);
  try{
+  if(provider==='qwen'){
+   if(text.length>120)return json({error:'Для этого голоса максимум 120 символов на запрос.'},400);
+   const upstream=await fetch(new URL('/speech',qwenURL),{method:'POST',redirect:'error',headers:{Authorization:'Bearer '+qwenToken,'Content-Type':'application/json'},body:JSON.stringify({text}),signal:controller.signal});
+   if(upstream.status===429)return json({error:'Сервер голоса занят. Попробуйте через несколько секунд.'},429);
+   if(!upstream.ok||!upstream.headers.get('content-type')?.startsWith('audio/wav'))return json({error:'Сервер голоса не вернул аудио.'},502);
+   return new Response(await upstream.arrayBuffer(),{headers:{'content-type':'audio/wav','cache-control':'no-store','x-content-type-options':'nosniff'}});
+  }
   if(provider==='fish'){
    // Uses the documented Fish API. No Jarvis application source or private voice is bundled.
    const model=env('FISH_MODEL')||'s2.1-pro';

@@ -59,10 +59,10 @@ async function check(){
   }catch(e){if(idle())$("status").textContent="● API недоступен: "+e.message}
 }
 check();
-let neuralVoice=null,neuralConfigured=false,fishConfigured=false,outputToken=0,outputActive=false;
-async function checkNeural(){try{const r=await fetch("/api/speech",{cache:"no-store"});const d=await r.json();neuralConfigured=r.ok&&d.providers?.openai?.configured===true;fishConfigured=r.ok&&d.providers?.fish?.configured===true;for(const [value,configured] of [['neural',neuralConfigured],['fish',fishConfigured]]){const option=$("speech-engine").querySelector?.('option[value='+value+']');if(option)option.disabled=!configured}$("neural-status").textContent='Fish Audio: '+(fishConfigured?'настроен':'не подключён')+' · OpenAI: '+(neuralConfigured?'настроен':'не подключён')}catch{$("neural-status").textContent="Не удалось проверить нейронную озвучку"}}
-function cloudVoice(){return prefs.engine==='neural'||prefs.engine==='fish'}
-function voiceReady(){return prefs.engine==='fish'?fishConfigured:neuralConfigured}
+let neuralVoice=null,neuralConfigured=false,fishConfigured=false,qwenConfigured=false,outputToken=0,outputActive=false;
+async function checkNeural(){try{const r=await fetch("/api/speech",{cache:"no-store"});const d=await r.json();neuralConfigured=r.ok&&d.providers?.openai?.configured===true;fishConfigured=r.ok&&d.providers?.fish?.configured===true;qwenConfigured=r.ok&&d.providers?.qwen?.configured===true;for(const [value,configured] of [['qwen',qwenConfigured],['neural',neuralConfigured],['fish',fishConfigured]]){const option=$("speech-engine").querySelector?.('option[value='+value+']');if(option)option.disabled=!configured}$("neural-status").textContent='Fish Audio: '+(fishConfigured?'настроен':'не подключён')+' · OpenAI: '+(neuralConfigured?'настроен':'не подключён')}catch{$("neural-status").textContent="Не удалось проверить нейронную озвучку"}}
+function cloudVoice(){return ['neural','fish','qwen'].includes(prefs.engine)}
+function voiceReady(){return prefs.engine==='qwen'?qwenConfigured:prefs.engine==='fish'?fishConfigured:neuralConfigured}
 checkNeural();
 function stopOutput(){outputToken++;outputActive=false;neuralVoice?.stop();window.speechSynthesis?.cancel?.()}
 function stopCapture(){recordingToken++;recognition?.abort?.();recognition=null;voiceController?.abort();voiceController=null}
@@ -76,13 +76,15 @@ function say(source){
     if(!voiceReady()){stopVoiceSession();$("status").textContent="Нейронный голос ещё не подключён. Откройте настройки голоса.";return}
     outputActive=true;
     if(!neuralVoice)neuralVoice=new TalgatNeural.NeuralVoice({lowLatency:true,fetch:(...args)=>fetch(...args),Audio:window.Audio,createURL:blob=>URL.createObjectURL(blob),revokeURL:url=>URL.revokeObjectURL(url),onState:state=>{document.body.dataset.state=state==='preparing'?'thinking':'speaking';$("status").textContent=state==='preparing'?"Готовлю голосовой ответ…":"Отвечаю · нейронный голос"},onEnd:()=>{outputActive=false;document.body.dataset.state='idle';if(voiceSession)startListening();else check()},onError:e=>{outputActive=false;stopVoiceSession();$("status").textContent=e.message}});
-    neuralVoice.speak(text,prefs.language||'ru',Number($("voice-rate").value)||1,prefs.engine==='fish'?'fish':'openai');return;
+    neuralVoice.speak(text,prefs.language||'ru',Number($("voice-rate").value)||1,prefs.engine==='neural'?'openai':prefs.engine);return;
   }
   if(!('speechSynthesis' in window)){$("status").textContent="Голос устройства недоступен.";return}
   outputActive=true;
   const u=new SpeechSynthesisUtterance(text);
   u.lang=({ru:"ru-RU",kk:"kk-KZ",en:"en-US"})[prefs.language]||"ru-RU";u.rate=Number($("voice-rate").value)||0.95;
-  u.onstart=()=>{if(token!==outputToken)return;document.body.dataset.state="speaking";$("status").textContent="Отвечаю · голос устройства"};
+  const deep=prefs.engine==="deep";
+  if(deep){u.pitch=0.75;u.rate*=0.92}
+  u.onstart=()=>{if(token!==outputToken)return;document.body.dataset.state="speaking";$("status").textContent=deep?"Отвечаю · низкий голос устройства":"Отвечаю · голос устройства"};
   u.onend=()=>{if(token!==outputToken)return;outputActive=false;document.body.dataset.state="idle";if(voiceSession)startListening();else check()};
   u.onerror=e=>{if(token!==outputToken)return;outputActive=false;document.body.dataset.state="idle";if(voiceSession)stopVoiceSession();if(!["interrupted","canceled"].includes(e.error))$("status").textContent=speechError(e.error)};
   const voices=speechSynthesis.getVoices();
@@ -103,7 +105,7 @@ async function send(prepared){
   const pending=add("assistant","Думаю…");
   const timeout=setTimeout(()=>controller?.abort(),35000);
   try{
-    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,materials:attachments.map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
+    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,search:Boolean($("web-search").checked),image:attachments[0]?.image,materials:attachments.filter(f=>f.text).map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
     const d=await readJson(r);
     if(!r.ok)throw new Error(d.error||"HTTP "+r.status);
     if(typeof d.answer!=="string"||!d.answer.trim())throw new Error("Модель вернула пустой ответ");
@@ -186,22 +188,63 @@ talk.onclick=()=>{
 };
 $("stage-voice").onclick=()=>talk.onclick();
 const mic=document.createElement('button');mic.textContent="🎙 Диктовка";mic.title="Запись и распознавание через Whisper";mic.onclick=()=>{if(recognition){recognition.stop();return}if(voiceSession)stopVoiceSession();captureVoice(true)};actions.append(mic);
+function previewPage(source){
+ const dialog=document.createElement('dialog');dialog.className='settings';
+ dialog.style.width='min(1100px, 96vw)';
+ const close=document.createElement('button');close.textContent='Закрыть предпросмотр';
+ const frame=document.createElement('iframe');frame.title='Предпросмотр веб-приложения';
+ frame.setAttribute('sandbox','allow-scripts');frame.referrerPolicy='no-referrer';
+ frame.style.cssText='display:block;width:100%;height:70vh;border:0;background:white';
+ frame.srcdoc='<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:; base-uri \'none\'; form-action \'none\'"><meta name="viewport" content="width=device-width,initial-scale=1">'+source.replace(/^\s*<!doctype html>/i,'');
+ close.onclick=()=>dialog.close();
+ dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+ dialog.append(close,frame);document.body.append(dialog);dialog.showModal();
+}
 function addCodeDownloads(el){
  for(const [index,code] of [...el.querySelectorAll('pre code')].entries()){
   const ext=({javascript:'js',typescript:'ts',python:'py',html:'html',css:'css',json:'json',bash:'sh',shell:'sh',sql:'sql',java:'java',cpp:'cpp',csharp:'cs',yaml:'yml'})[(code.className.match(/language-([a-z]+)/)||[])[1]]||'txt';
   const bar=document.createElement('div');bar.className='codeactions';const label=document.createElement('span');label.textContent='talgat-code-'+(index+1)+'.'+ext;
-  const download=document.createElement('button');download.textContent='Скачать файл ↓';download.onclick=()=>{const form=document.createElement('form');form.method='POST';form.action='/api/export';form.style.display='none';for(const [name,value] of [['filename',label.textContent],['content',code.textContent]]){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.append(input)}document.body.append(form);form.submit();setTimeout(()=>form.remove(),2000)};bar.append(label,download);code.parentElement.before(bar);
+  const download=document.createElement('button');download.textContent='Скачать файл ↓';download.onclick=()=>{const form=document.createElement('form');form.method='POST';form.action='/api/export';form.style.display='none';for(const [name,value] of [['filename',label.textContent],['content',code.textContent]]){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.append(input)}document.body.append(form);form.submit();setTimeout(()=>form.remove(),2000)};bar.append(label,download);
+  if(ext==='html'){
+   const preview=document.createElement('button');preview.textContent='Запустить предпросмотр';
+   preview.onclick=()=>previewPage(code.textContent);bar.append(preview);
+  }
+  code.parentElement.before(bar);
  }
 }
 function renderAttachments(){
  $("attachments").replaceChildren();for(const [i,file] of attachments.entries()){const chip=document.createElement('span');chip.className='file-chip';chip.textContent=file.name;const remove=document.createElement('button');remove.textContent='×';remove.setAttribute('aria-label','Убрать '+file.name);remove.onclick=()=>{attachments.splice(i,1);renderAttachments()};chip.append(remove);$("attachments").append(chip)}
 }
 $("attach").onclick=()=>$("file-input").click();
+let fileVersion=0;
 $("file-input").onchange=async e=>{
  const file=e.target.files[0];e.target.value='';if(!file)return;
- if(!/\.(txt|md|json|csv|js|ts|py|html|css|xml|yaml|yml)$/i.test(file.name)||file.size>200000){$("status").textContent="Поддерживаются текстовые файлы до 200 КБ. PDF и изображения пока не подключены.";return}
- let text;try{text=await file.text()}catch{$("status").textContent="Не удалось прочитать файл. Выберите его заново.";return}if(text.length>24000){$("status").textContent="Материал длиннее 24 000 символов. Выберите меньший фрагмент.";return}
- attachments=[{name:file.name,text}];renderAttachments();$("status").textContent="Материал будет отправлен вместе с вопросом";
+ const version=++fileVersion;
+ $("status").textContent="Читаю файл…";
+ try{
+  const {readFile}=await import('/generated/files.mjs');
+  const result=await readFile(file);
+  if(version!==fileVersion)return;
+  if(result.image?.length>2_000_000)throw new Error("Фото слишком большое после обработки. Обрежьте лишнее вокруг задания.");
+  attachments=[{name:file.name,...result}];renderAttachments();
+  if(result.image)$("web-search").checked=false;
+  $("status").textContent="Файл готов. Напишите, что нужно сделать.";
+ }catch(error){if(version===fileVersion)$("status").textContent=error.message||"Не удалось прочитать файл."}
+};
+$("school-open").onclick=()=>{
+ $("school").showModal();
+ closeNavigation();
+};
+$("school-form").onsubmit=e=>{
+ e.preventDefault();
+ const grade=$("school-grade").value;
+ const subject=$("school-subject").value.trim();
+ const task=$("school-task").value.trim();
+ if(!subject||!task)return;
+ const book=$("school-book").value.trim();
+ $("question").value="Казахстан, "+(grade==="0"?"предшкольный 0 класс":grade+" класс")+", предмет: "+subject+"."+(book?" Учебник, издание и страница: "+book+".":"")+"\n"+task+"\nОбъясни решение по шагам на уровне класса и проверь ответ.";
+ $("school").close();
+ $("question").focus();
 };
 for(const mode of ['chat','code'])$("mode-"+mode).onclick=()=>{workMode=mode;for(const m of ['chat','code']){$('mode-'+m).classList.toggle('selected',m===mode);$('mode-'+m).setAttribute('aria-pressed',String(m===mode))}$('mode-title').textContent=mode==='code'?'Генерация и разбор кода':'Диалог с Talgat';$('question').placeholder=mode==='code'?'Опишите программу, файл или ошибку…':'Вопрос, задача или идея…'};
 const fitViewport=()=>document.documentElement.style.setProperty('--appheight',(window.visualViewport?.height||innerHeight)+'px');window.visualViewport?.addEventListener('resize',fitViewport);window.addEventListener('resize',fitViewport);fitViewport();
@@ -210,7 +253,7 @@ const prefsKey="talgat-ui-preferences";
 let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device"};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
-  prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['neural','fish'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
+  prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['neural','fish','deep','qwen'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
   document.body.classList.toggle("light",prefs.theme==="light");
   document.documentElement.style.setProperty("--size",Math.max(14,Math.min(20,Number(prefs.font)||16))+"px");
   $("speech-engine").value=prefs.engine;
