@@ -188,11 +188,28 @@ talk.onclick=()=>{
 };
 $("stage-voice").onclick=()=>talk.onclick();
 const mic=document.createElement('button');mic.textContent="🎙 Диктовка";mic.title="Запись и распознавание через Whisper";mic.onclick=()=>{if(recognition){recognition.stop();return}if(voiceSession)stopVoiceSession();captureVoice(true)};actions.append(mic);
+function previewPage(source){
+ const dialog=document.createElement('dialog');dialog.className='settings';
+ dialog.style.width='min(1100px, 96vw)';
+ const close=document.createElement('button');close.textContent='Закрыть предпросмотр';
+ const frame=document.createElement('iframe');frame.title='Предпросмотр веб-приложения';
+ frame.setAttribute('sandbox','allow-scripts');frame.referrerPolicy='no-referrer';
+ frame.style.cssText='display:block;width:100%;height:70vh;border:0;background:white';
+ frame.srcdoc='<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:; base-uri \'none\'; form-action \'none\'"><meta name="viewport" content="width=device-width,initial-scale=1">'+source.replace(/^\s*<!doctype html>/i,'');
+ close.onclick=()=>dialog.close();
+ dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+ dialog.append(close,frame);document.body.append(dialog);dialog.showModal();
+}
 function addCodeDownloads(el){
  for(const [index,code] of [...el.querySelectorAll('pre code')].entries()){
   const ext=({javascript:'js',typescript:'ts',python:'py',html:'html',css:'css',json:'json',bash:'sh',shell:'sh',sql:'sql',java:'java',cpp:'cpp',csharp:'cs',yaml:'yml'})[(code.className.match(/language-([a-z]+)/)||[])[1]]||'txt';
   const bar=document.createElement('div');bar.className='codeactions';const label=document.createElement('span');label.textContent='talgat-code-'+(index+1)+'.'+ext;
-  const download=document.createElement('button');download.textContent='Скачать файл ↓';download.onclick=()=>{const form=document.createElement('form');form.method='POST';form.action='/api/export';form.style.display='none';for(const [name,value] of [['filename',label.textContent],['content',code.textContent]]){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.append(input)}document.body.append(form);form.submit();setTimeout(()=>form.remove(),2000)};bar.append(label,download);code.parentElement.before(bar);
+  const download=document.createElement('button');download.textContent='Скачать файл ↓';download.onclick=()=>{const form=document.createElement('form');form.method='POST';form.action='/api/export';form.style.display='none';for(const [name,value] of [['filename',label.textContent],['content',code.textContent]]){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.append(input)}document.body.append(form);form.submit();setTimeout(()=>form.remove(),2000)};bar.append(label,download);
+  if(ext==='html'){
+   const preview=document.createElement('button');preview.textContent='Запустить предпросмотр';
+   preview.onclick=()=>previewPage(code.textContent);bar.append(preview);
+  }
+  code.parentElement.before(bar);
  }
 }
 function renderAttachments(){
