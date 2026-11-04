@@ -9,11 +9,11 @@ class NeuralVoice{
  constructor(deps){this.deps=deps;this.token=0;this.requests=new Set();this.player=null;this.url=null;this.release=null}
  stop(){this.token++;for(const request of this.requests)request.abort();this.requests.clear();if(this.player){this.player.pause();this.player.src='';this.player=null}if(this.url){this.deps.revokeURL(this.url);this.url=null}this.release?.();this.release=null}
  async speak(text,language,rate,provider='openai'){
-  this.stop();const token=this.token,parts=this.deps.lowLatency?sentenceChunks(text):chunks(text),pending=new Map();
+  this.stop();const token=this.token,parts=provider==="qwen"?chunks(text,120):this.deps.lowLatency?sentenceChunks(text):chunks(text),pending=new Map();
   const prepare=index=>{
    if(pending.has(index))return pending.get(index);
    const promise=(async()=>{
-    const request=new AbortController();this.requests.add(request);const timer=setTimeout(()=>request.abort(),this.deps.timeoutMs||30000);
+    const request=new AbortController();this.requests.add(request);const timer=setTimeout(()=>request.abort(),this.deps.timeoutMs||(provider==="qwen"?55000:30000));
     try{
      const res=await this.deps.fetch('/api/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:parts[index],language,provider}),signal:request.signal});
      if(!res.ok){const data=await res.json().catch(()=>({}));throw new Error(data.error||'Не удалось получить голосовой ответ.')}
