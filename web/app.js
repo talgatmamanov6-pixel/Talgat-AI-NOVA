@@ -187,7 +187,7 @@ talk.onclick=()=>{
  $("stage-voice").lastElementChild.textContent="Завершить разговор";closeNavigation();startListening();
 };
 $("stage-voice").onclick=()=>talk.onclick();
-const mic=document.createElement('button');mic.textContent="🎙 Диктовка";mic.title="Запись и распознавание через Whisper";mic.onclick=()=>{if(recognition){recognition.stop();return}if(voiceSession)stopVoiceSession();captureVoice(true)};actions.append(mic);
+const mic=document.createElement('button');mic.id='mic';mic.textContent="🎙 Диктовка";mic.title="Запись и распознавание через Whisper";mic.onclick=()=>{if(recognition){recognition.stop();return}if(voiceSession)stopVoiceSession();captureVoice(true)};actions.append(mic);
 function previewPage(source){
  const dialog=document.createElement('dialog');dialog.className='settings';
  dialog.style.width='min(1100px, 96vw)';
