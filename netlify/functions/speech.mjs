@@ -1,7 +1,8 @@
+import {metered,AccessError} from './lib/commerce.mjs';
 import OpenAI from 'openai';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
 const env=name=>{try{return Netlify.env.get(name)}catch{return undefined}};
-export default async function speech(req){
+async function speech(req){
  const openaiKey=env('TALGAT_TTS_API_KEY'),fishKey=env('FISH_API_KEY'),fishVoice=env('FISH_VOICE_ID');
  const heygenKey=env('HEYGEN_API_KEY'),heygenVoice=env('HEYGEN_VOICE_ID')||'2298ae4b21174051a80ab99dc6df6dcc';
  const qwenURL=env('QWEN_VOICE_URL'),qwenToken=env('QWEN_VOICE_TOKEN');
@@ -65,3 +66,5 @@ export default async function speech(req){
  }catch(e){return json({error:e.name==='AbortError'?'Превышено время ожидания озвучки.':e.status===401?'Ключ сервиса озвучки отклонён.':e.status===429?'Лимит или баланс сервиса озвучки исчерпан.':'Сервис нейронной озвучки временно недоступен.'},e.status===429?429:502)}finally{clearTimeout(timer)}
 }
 export const config={path:'/api/speech',rateLimit:{action:'rate_limit',aggregateBy:'ip',windowSize:60,windowLimit:30}};
+
+export default metered(speech,{metric:'speech',measure:async r=>{const b=await r.json();const n=Array.from(String(b.text||'')).length;if(n<1||n>1200)throw new AccessError('Текст озвучки: 1–1200 символов',400);return n}});

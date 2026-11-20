@@ -2,8 +2,9 @@
 'use strict';
 const get=id=>document.getElementById(id),catalog=window.TalgatSkills;
 let selected=catalog.items[0],category='Все';
-const key='talgat-saved-results-v1';let saved=[];
+let key='talgat-saved-results-v1-guest';let saved=[];
 try{const data=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(data))saved=data.filter(x=>x&&typeof x.id==='string'&&typeof x.source==='string'&&x.source.length<=100000&&typeof x.title==='string').slice(0,24)}catch{}
+window.addEventListener('talgat-account-changed',event=>{key='talgat-saved-results-v1-'+(event.detail.id||'guest');saved=[];try{const data=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(data))saved=data.filter(x=>x&&typeof x.id==='string'&&typeof x.source==='string'&&x.source.length<=100000&&typeof x.title==='string').slice(0,24)}catch{}get('saved-list').replaceChildren();get('saved-preview').replaceChildren();});
 const persist=()=>{try{localStorage.setItem(key,JSON.stringify(saved));return true}catch{get('status').textContent='Не хватает места в браузере. Скачайте результат.';return false}};
 function download(filename,content){
  const form=document.createElement('form');form.method='POST';form.action='/api/export';form.hidden=true;

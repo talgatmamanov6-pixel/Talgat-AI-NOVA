@@ -1,0 +1,10 @@
+CREATE TABLE talgat_accounts (id text PRIMARY KEY, email text NOT NULL, blocked boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE talgat_wallets (user_id text PRIMARY KEY REFERENCES talgat_accounts(id), plan text NOT NULL DEFAULT 'trial', expires_at timestamptz NOT NULL DEFAULT now()+interval '7 days', text_limit integer NOT NULL DEFAULT 10, image_limit integer NOT NULL DEFAULT 0, recording_limit integer NOT NULL DEFAULT 2, speech_limit integer NOT NULL DEFAULT 1000, text_used integer NOT NULL DEFAULT 0, image_used integer NOT NULL DEFAULT 0, recording_used integer NOT NULL DEFAULT 0, speech_used integer NOT NULL DEFAULT 0);
+CREATE TABLE talgat_usage (id uuid PRIMARY KEY, user_id text NOT NULL REFERENCES talgat_accounts(id), metric text NOT NULL, units integer NOT NULL CHECK(units>0), state text NOT NULL DEFAULT 'reserved', created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX talgat_usage_user ON talgat_usage(user_id,created_at);
+CREATE TABLE talgat_daily (day date NOT NULL, metric text NOT NULL, units integer NOT NULL DEFAULT 0, PRIMARY KEY(day,metric));
+CREATE TABLE talgat_settings (id integer PRIMARY KEY CHECK(id=1), payment_url text NOT NULL DEFAULT '', seller text NOT NULL DEFAULT '', contact text NOT NULL DEFAULT '', sales_enabled boolean NOT NULL DEFAULT false);
+INSERT INTO talgat_settings(id) VALUES(1);
+CREATE TABLE talgat_orders (id uuid PRIMARY KEY, user_id text NOT NULL REFERENCES talgat_accounts(id), offer text NOT NULL CHECK(offer IN ('basic','service')), amount integer NOT NULL CHECK(amount>0), state text NOT NULL DEFAULT 'pending', reference text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now(), reviewed_at timestamptz);
+CREATE INDEX talgat_orders_user ON talgat_orders(user_id,created_at);
+CREATE TABLE talgat_audit (id bigserial PRIMARY KEY, actor text NOT NULL, action text NOT NULL, subject text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
