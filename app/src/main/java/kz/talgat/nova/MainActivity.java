@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
 
  @Override public void onCreate(Bundle state) {
   super.onCreate(state);
+  if(Build.VERSION.SDK_INT>=30) getWindow().setDecorFitsSystemWindows(false);
   getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
   getWindow().setStatusBarColor(Color.rgb(9,16,28));
   getWindow().setNavigationBarColor(Color.rgb(9,16,28));
@@ -138,7 +139,7 @@ public class MainActivity extends Activity {
  private void setupNavigation() {
   web.setWebViewClient(new WebViewClient() {
    @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) {
-    status.setText("Загрузка…"); status.setVisibility(View.VISIBLE);
+    if(NativePolicy.trusted(url)) { status.setText("Загрузка…"); status.setVisibility(View.VISIBLE); }
     if(audioRequest!=null) { audioRequest.deny(); audioRequest=null; }
    }
    @Override public void onPageFinished(WebView view,String url) {
