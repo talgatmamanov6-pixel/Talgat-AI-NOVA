@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id);
 let busy=false,voice=false,controller=null,recognition=null,voiceSession=false;
 let workMode="chat",attachments=[],recordingToken=0,voiceController=null;
 const speechError=code=>({"not-allowed":"Разрешите микрофон и звук в настройках браузера.","audio-capture":"Микрофон не найден.","network":"Проверьте интернет для распознавания речи.","service-not-allowed":"Голосовой сервис недоступен в этом браузере.","language-not-supported":"Русская речь не поддерживается голосовой системой устройства.","synthesis-unavailable":"На устройстве недоступен голос для озвучки."}[code]||"Голосовая функция недоступна. Попробуйте другой браузер.");
-const storageKey="talgat-ai-2-history";
+let storageKey="talgat-ai-2-history-guest";
 let history=[];
 try{const saved=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(saved))history=saved.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string").slice(-20)}catch{}
 const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(history.slice(-20)))}catch{}};
@@ -92,6 +92,8 @@ function say(source){
   try{speechSynthesis.speak(u)}catch{outputActive=false;stopVoiceSession();$("status").textContent="Не удалось запустить голос устройства."}
 }
 async function send(prepared){
+  if(!window.TalgatAccount?.id){location.href="/account.html";return}
+
   let question=typeof prepared?.prompt==="string"?prepared.prompt:$("question").value.trim();
   const visibleQuestion=typeof prepared?.display==="string"?prepared.display:question;
   if(!question||busy)return;
@@ -256,7 +258,7 @@ $("school-form").onsubmit=e=>{
 for(const mode of ['chat','code'])$("mode-"+mode).onclick=()=>{workMode=mode;for(const m of ['chat','code']){$('mode-'+m).classList.toggle('selected',m===mode);$('mode-'+m).setAttribute('aria-pressed',String(m===mode))}$('mode-title').textContent=mode==='code'?'Генерация и разбор кода':'Диалог с Talgat';$('question').placeholder=mode==='code'?'Опишите программу, файл или ошибку…':'Вопрос, задача или идея…'};
 const fitViewport=()=>document.documentElement.style.setProperty('--appheight',(window.visualViewport?.height||innerHeight)+'px');window.visualViewport?.addEventListener('resize',fitViewport);window.addEventListener('resize',fitViewport);fitViewport();
 // Local preferences never contain provider credentials.
-const prefsKey="talgat-ui-preferences";
+let prefsKey="talgat-ui-preferences-guest";
 let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4,reasoningQuality:"deep"};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
@@ -307,3 +309,14 @@ function animateOrb(time){
  if(time-lastFrame>40){const delta=Math.min(80,time-lastFrame||40);lastFrame=time;if(prefs.motion!=='off'&&!reduced.matches)rotation+=delta*(document.body.dataset.state==='thinking'?.00035:.00011);drawOrb($('orb'),time);const state=document.body.dataset.state;$("orb-state").textContent=state==='thinking'?'ФОРМИРУЮ ОТВЕТ':state==='speaking'?'ОЗВУЧИВАЮ':state==='listening'?'СЛУШАЮ ВАС':state==='transcribing'?'РАСПОЗНАЮ РЕЧЬ':'ГОТОВ К РАБОТЕ'}requestAnimationFrame(animateOrb);
 }
 requestAnimationFrame(animateOrb);
+
+let activeAccount=null;
+window.TalgatSwitchAccount=id=>{
+ if(id===activeAccount)return;activeAccount=id;
+ controller?.abort();stopVoiceSession();attachments=[];$("question").value="";
+ storageKey="talgat-ai-2-history-"+(id||"guest");prefsKey="talgat-ui-preferences-"+(id||"guest");history=[];
+ try{const data=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(data))history=data.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string").slice(-20)}catch{}
+ $("chat").replaceChildren();document.body.classList.remove("has-chat");for(const m of history)add(m.role,m.content);
+ prefs={theme:"dark",font:16,rate:.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4,reasoningQuality:"deep"};
+ try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}applyPrefs();
+};

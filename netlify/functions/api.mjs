@@ -1,9 +1,10 @@
+import {metered,AccessError} from './lib/commerce.mjs';
 import {reasoningOptions,decisionInstructions} from "./lib/reasoning-policy.mjs";
 import {verifiedFractionQuiz} from "./fraction-quiz.mjs";
 // Talgat AI 2.0 — server-side Groq proxy. Never expose GROQ_API_KEY to the browser.
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}});
 const getEnv=(name)=>{try{return Netlify.env.get(name)}catch{return undefined}};
-export default async function handler(request){
+async function handler(request){
   const path=new URL(request.url).pathname;
   const key=getEnv("GROQ_API_KEY");
   if(path==="/api/status"){
@@ -93,3 +94,5 @@ export default async function handler(request){
   }finally{clearTimeout(timer)}
 }
 export const config={path:["/api/status","/api/chat"]};
+
+export default metered(handler,{metric:'text',measure:async r=>{const b=await r.json();return b.search||b.image?3:1}});
