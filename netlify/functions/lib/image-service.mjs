@@ -11,7 +11,12 @@ function publicError(error){
 }
 export function imageHandler({configured,model,clientFactory,toImageFile}){
  return async request=>{
-  if(request.method==='GET')return json({configured:Boolean(configured()),model:model(),supportsReference:true});
+  if(request.method==='GET'){
+   if(new URL(request.url).searchParams.get('capabilities')==='1'&&configured()){
+    try{const listing=await clientFactory().models.list({timeout:8000,maxRetries:0});return json({configured:true,model:model(),imageModels:(listing.data||[]).map(item=>item.id).filter(id=>typeof id==='string'&&id.startsWith('gpt-image')).slice(0,30)})}catch(error){return json({configured:true,model:model(),catalogAvailable:false,upstream_status:Number(error?.status)||null})}
+   }
+   return json({configured:Boolean(configured()),model:model(),supportsReference:true});
+  }
   if(request.method!=='POST')return json({error:'Используйте POST.'},405);
   if(!configured())return json({error:'Генерация изображений ещё не подключена: серверу нужен доступ к AI Gateway.',code:'images_not_configured'},503);
   if(Number(request.headers.get('content-length'))>2300000)return json({error:'Запрос слишком большой.'},413);
@@ -45,7 +50,7 @@ export function imageHandler({configured,model,clientFactory,toImageFile}){
       }
      }
      if(!complete)throw new Error('missing_image');
-    }catch(error){emit({type:'error',error:publicError(error)})}
+    }catch(error){emit({type:'error',error:publicError(error),upstream_status:Number(error?.status)||null,provider_code:typeof error?.code==='string'?error.code.replace(/[^a-zA-Z0-9_-]/g,'').slice(0,80):undefined,parameter:typeof error?.param==='string'?error.param.replace(/[^a-zA-Z0-9_.-]/g,'').slice(0,80):undefined})}
     finally{clearTimeout(timer);request.signal.removeEventListener('abort',stop);ended=true;if(!cancelled)output.close()}
    },
    cancel(){cancelled=true;abort.abort()}
