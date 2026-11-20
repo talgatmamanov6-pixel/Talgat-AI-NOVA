@@ -59,10 +59,10 @@ async function check(){
   }catch(e){if(idle())$("status").textContent="● API недоступен: "+e.message}
 }
 check();
-let neuralVoice=null,neuralConfigured=false,fishConfigured=false,qwenConfigured=false,outputToken=0,outputActive=false;
-async function checkNeural(){try{const r=await fetch("/api/speech",{cache:"no-store"});const d=await r.json();neuralConfigured=r.ok&&d.providers?.openai?.configured===true;fishConfigured=r.ok&&d.providers?.fish?.configured===true;qwenConfigured=r.ok&&d.providers?.qwen?.configured===true;for(const [value,configured] of [['qwen',qwenConfigured],['neural',neuralConfigured],['fish',fishConfigured]]){const option=$("speech-engine").querySelector?.('option[value='+value+']');if(option)option.disabled=!configured}$("neural-status").textContent='Fish Audio: '+(fishConfigured?'настроен':'не подключён')+' · OpenAI: '+(neuralConfigured?'настроен':'не подключён')}catch{$("neural-status").textContent="Не удалось проверить нейронную озвучку"}}
-function cloudVoice(){return ['neural','fish','qwen'].includes(prefs.engine)}
-function voiceReady(){return prefs.engine==='qwen'?qwenConfigured:prefs.engine==='fish'?fishConfigured:neuralConfigured}
+let neuralVoice=null,neuralConfigured=false,fishConfigured=false,qwenConfigured=false,heygenConfigured=false,outputToken=0,outputActive=false;
+async function checkNeural(){try{const r=await fetch("/api/speech",{cache:"no-store"});const d=await r.json();neuralConfigured=r.ok&&d.providers?.openai?.configured===true;fishConfigured=r.ok&&d.providers?.fish?.configured===true;qwenConfigured=r.ok&&d.providers?.qwen?.configured===true;heygenConfigured=r.ok&&d.providers?.heygen?.configured===true;for(const [value,configured] of [['heygen',heygenConfigured],['qwen',qwenConfigured],['neural',neuralConfigured],['fish',fishConfigured]]){const option=$("speech-engine").querySelector?.('option[value='+value+']');if(option)option.disabled=!configured}if(heygenConfigured&&prefs.heygenVoiceVersion!==1){prefs.engine="heygen";prefs.rate=1;prefs.heygenVoiceVersion=1;applyPrefs()}$("neural-status").textContent='Ваш голос: '+(heygenConfigured?'настроен':'не подключён')+' · Fish Audio: '+(fishConfigured?'настроен':'не подключён')+' · OpenAI: '+(neuralConfigured?'настроен':'не подключён')}catch{$("neural-status").textContent="Не удалось проверить нейронную озвучку"}}
+function cloudVoice(){return ['heygen','neural','fish','qwen'].includes(prefs.engine)}
+function voiceReady(){return prefs.engine==='heygen'?heygenConfigured:prefs.engine==='qwen'?qwenConfigured:prefs.engine==='fish'?fishConfigured:neuralConfigured}
 checkNeural();
 function stopOutput(){outputToken++;outputActive=false;neuralVoice?.stop();window.speechSynthesis?.cancel?.()}
 function stopCapture(){recordingToken++;recognition?.abort?.();recognition=null;voiceController?.abort();voiceController=null}
@@ -253,7 +253,7 @@ const prefsKey="talgat-ui-preferences";
 let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device"};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
-  prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['neural','fish','deep','qwen'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
+  prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['heygen','neural','fish','deep','qwen'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
   document.body.classList.toggle("light",prefs.theme==="light");
   document.documentElement.style.setProperty("--size",Math.max(14,Math.min(20,Number(prefs.font)||16))+"px");
   $("speech-engine").value=prefs.engine;

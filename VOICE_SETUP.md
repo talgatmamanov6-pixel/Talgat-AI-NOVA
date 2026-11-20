@@ -28,3 +28,24 @@ Cloud speech starts with a short first sentence, prefetches at most one followin
 ## Validation limits
 
 Provider adapters and lifecycle tests use mocked upstream responses. Without a configured provider account, live Fish/Cedar timbre, billing access and end-to-end latency cannot be verified. Physical Android microphone behavior requires device testing.
+
+## Selected HeyGen voice
+
+The selected instant clone is already ACTIVE in the user's HeyGen workspace.
+The website needs its own server credential: connecting HeyGen to ChatGPT does
+not pass that OAuth credential to Netlify.
+
+Set in Netlify **Functions** scope for branch-deploy and production, then redeploy:
+
+- `HEYGEN_API_KEY`: a secret key from the same HeyGen workspace, with `voices:write`.
+- `HEYGEN_VOICE_ID`: optional; the server defaults to the user's selected existing clone.
+- `HEYGEN_VOICE_MODEL`: defaults to `heygen-voice-1-turbo-free`. The free offering
+  is advertised until November 30, 2026; availability and latency are not guaranteed.
+  A future plan change requires an explicit model configuration; no paid fallback.
+
+The provider uses `POST /v3/models/audio/tts/stream` with MP3 output. No API key
+or private voice identifier is exposed by `/api/speech`. After configuration,
+the selected voice becomes the default once; later explicit voice choices persist.
+Stop cancels pending synthesis and playback. Other providers remain selectable.
+
+Reference: https://developers.heygen.com/docs/voices/heygen-voice-speech

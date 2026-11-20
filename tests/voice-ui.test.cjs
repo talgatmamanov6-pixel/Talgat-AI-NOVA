@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
-function setup({denied=false,instantSpeech=false,delayedStop=false}={}){
+function setup({denied=false,instantSpeech=false,delayedStop=false,voiceStatus={}}={}){
  const elements=new Map(),recorders=[],utterances=[],calls=[],pendingStops=[];let interval,now=1000,loud=true,stopped=0;
  function el(){return {value:'',textContent:'',dataset:{},style:{setProperty(){}},classList:{add(){},remove(){},toggle(){}},append(){},before(){},replaceChildren(){},remove(){},focus(){},scrollIntoView(){},setAttribute(k,v){this[k]=v},addEventListener(k,f){this[k]=f},querySelectorAll(){return []},getBoundingClientRect(){return {width:0,height:0}}}}
  const get=id=>{if(!elements.has(id))elements.set(id,el());return elements.get(id)};get('stage-voice').lastElementChild=el();
@@ -7,7 +7,7 @@ function setup({denied=false,instantSpeech=false,delayedStop=false}={}){
  class AudioContext{async resume(){}async close(){}createMediaStreamSource(){return {connect(){}}}createAnalyser(){return {fftSize:1024,getFloatTimeDomainData(a){a.fill(loud?.1:0)}}}}
  const document={getElementById:get,body:el(),documentElement:el(),createElement:el,querySelector:()=>get('actions'),querySelectorAll:()=>[]};
  const synth={cancel(){},getVoices(){return []},speak(u){utterances.push(u);u.onstart?.();if(instantSpeech)u.onend?.()}};
- const context={document,console,Response,Request,FormData,Blob,URL,AbortController,TypeError,Float32Array,innerHeight:800,performance:{now:()=>now},addEventListener(){},navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error('denied'),{name:'NotAllowedError'});return {getTracks:()=>[{stop(){stopped++}}]}}}},AudioContext,MediaRecorder:Recorder,localStorage:{getItem(){return null},setItem(){}},SpeechSynthesisUtterance:class{constructor(text){this.text=text}},speechSynthesis:synth,setInterval(f){interval=f;return 1},clearInterval(){interval=null},setTimeout,clearTimeout,requestAnimationFrame(){},matchMedia:()=>({matches:false}),fetch:async(url,opts)=>{calls.push({url,opts});return Response.json(url==='/api/status'?{ok:true,ai_configured:true}:url==='/api/transcribe'?{text:'Сколько будет два плюс два?'}:{answer:'Ответ **готов**. $$x=2$$'})}};
+ const context={document,console,Response,Request,FormData,Blob,URL,AbortController,TypeError,Float32Array,innerHeight:800,performance:{now:()=>now},addEventListener(){},navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error('denied'),{name:'NotAllowedError'});return {getTracks:()=>[{stop(){stopped++}}]}}}},AudioContext,MediaRecorder:Recorder,localStorage:{getItem(){return null},setItem(){}},SpeechSynthesisUtterance:class{constructor(text){this.text=text}},speechSynthesis:synth,setInterval(f){interval=f;return 1},clearInterval(){interval=null},setTimeout,clearTimeout,requestAnimationFrame(){},matchMedia:()=>({matches:false}),fetch:async(url,opts)=>{calls.push({url,opts});return Response.json(url==='/api/status'?{ok:true,ai_configured:true}:url==='/api/speech'?voiceStatus:url==='/api/transcribe'?{text:'Сколько будет два плюс два?'}:{answer:'Ответ **готов**. $$x=2$$'})}};
  context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync('web/app.js','utf8'),context);
  return {context,get,recorders,utterances,calls,flushStops(){while(pendingStops.length)pendingStops.shift()()},endSpeech(){interval();loud=false;now+=2000;interval()},get stopped(){return stopped}};
 }
@@ -49,4 +49,13 @@ test('numeric math is rendered while currency ranges remain unchanged',async()=>
 });
 test('delayed stop from an old recorder cannot erase the new recording session',async()=>{
  const a=setup({delayedStop:true});await settle();vm.runInContext('talk.onclick()',a.context);await settle();vm.runInContext('stopVoiceSession();talk.onclick()',a.context);await settle();assert.equal(a.recorders.length,2);a.flushStops();assert.equal(vm.runInContext('recognition!==null && voiceSession',a.context),true);assert.equal(a.calls.some(c=>c.url==='/api/chat'),false);vm.runInContext('stopVoiceSession()',a.context);a.flushStops();
+});
+
+test('the approved HeyGen voice becomes default once and later voice selections persist',async()=>{
+ const a=setup({voiceStatus:{providers:{heygen:{configured:true}}}});await settle();
+ assert.equal(vm.runInContext('prefs.engine',a.context),'heygen');assert.equal(vm.runInContext('prefs.rate',a.context),1);assert.equal(vm.runInContext('cloudVoice() && voiceReady()',a.context),true);
+ vm.runInContext('prefs.engine="device";applyPrefs()',a.context);await vm.runInContext('checkNeural()',a.context);assert.equal(vm.runInContext('prefs.engine',a.context),'device');
+});
+test('an unconfigured HeyGen voice cannot silently become device playback',async()=>{
+ const a=setup();await settle();vm.runInContext('prefs.engine="heygen";voice=true;say("Привет")',a.context);assert.equal(a.utterances.length,0);assert.match(a.get('status').textContent,/не подключён/);
 });
