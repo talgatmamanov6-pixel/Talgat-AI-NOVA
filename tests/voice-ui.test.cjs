@@ -1,15 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
-function setup({denied=false,instantSpeech=false,delayedStop=false,voiceStatus={},chatPromise=null}={}){
- const elements=new Map(),recorders=[],utterances=[],calls=[],pendingStops=[];let interval,now=1000,loud=.1,stopped=0;
+function setup({denied=false,instantSpeech=false,delayedStop=false,voiceStatus={},chatPromise=null,transcribeResponse=null}={}){
+ const elements=new Map(),recorders=[],utterances=[],calls=[],pendingStops=[],audioEvents=[],audioContexts=[];let interval,now=1000,loud=.1,stopped=0;
  function el(){return {value:'',textContent:'',dataset:{},style:{setProperty(){}},classList:{add(){},remove(){},toggle(){}},append(){},before(){},replaceChildren(){},remove(){},focus(){},scrollIntoView(){},setAttribute(k,v){this[k]=v},addEventListener(k,f){this[k]=f},querySelectorAll(){return []},getBoundingClientRect(){return {width:0,height:0}}}}
  const get=id=>{if(!elements.has(id))elements.set(id,el());return elements.get(id)};get('stage-voice').lastElementChild=el();
  class Recorder{static isTypeSupported(){return true}constructor(){recorders.push(this);this.mimeType='audio/webm';this.state='inactive'}start(){this.state='recording'}stop(){this.state='inactive';this.ondataavailable({data:new Blob(['recorded voice '.repeat(30)])});if(delayedStop)pendingStops.push(()=>this.onstop());else this.onstop()}}
- class AudioContext{async resume(){}async close(){}createMediaStreamSource(){return {connect(){}}}createAnalyser(){return {fftSize:1024,getFloatTimeDomainData(a){a.fill(loud)}}}}
+ class AudioContext{constructor(){audioContexts.push(this)}async resume(){audioEvents.push("resume");this.state="running"}async close(){this.state="closed"}createMediaStreamSource(){return {connect(){}}}createAnalyser(){return {fftSize:1024,getFloatTimeDomainData(a){a.fill(loud)}}}}
  const document={getElementById:get,body:el(),documentElement:el(),createElement:el,querySelector:()=>get('actions'),querySelectorAll:()=>[]};
  const synth={cancel(){},getVoices(){return []},speak(u){utterances.push(u);u.onstart?.();if(instantSpeech)u.onend?.()}};
- const context={document,console,Response,Request,FormData,Blob,URL,AbortController,TypeError,Float32Array,innerHeight:800,performance:{now:()=>now},addEventListener(){},navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error('denied'),{name:'NotAllowedError'});return {getTracks:()=>[{stop(){stopped++}}]}}}},AudioContext,MediaRecorder:Recorder,localStorage:{getItem(){return null},setItem(){}},SpeechSynthesisUtterance:class{constructor(text){this.text=text}},speechSynthesis:synth,setInterval(f){interval=f;return 1},clearInterval(){interval=null},setTimeout,clearTimeout,requestAnimationFrame(){},matchMedia:()=>({matches:false}),fetch:async(url,opts)=>{calls.push({url,opts});if(url==='/api/chat'&&chatPromise)return chatPromise;return Response.json(url==='/api/status'?{ok:true,ai_configured:true}:url==='/api/speech'?voiceStatus:url==='/api/transcribe'?{text:'Сколько будет два плюс два?'}:{answer:'Ответ **готов**. $$x=2$$'})}};
+ const context={document,console,Response,Request,FormData,Blob,URL,AbortController,TypeError,Float32Array,innerHeight:800,performance:{now:()=>now},addEventListener(){},navigator:{mediaDevices:{getUserMedia:async()=>{audioEvents.push("microphone");if(denied)throw Object.assign(new Error('denied'),{name:'NotAllowedError'});return {getTracks:()=>[{stop(){stopped++}}]}}}},AudioContext,MediaRecorder:Recorder,localStorage:{getItem(){return null},setItem(){}},SpeechSynthesisUtterance:class{constructor(text){this.text=text}},speechSynthesis:synth,setInterval(f){interval=f;return 1},clearInterval(){interval=null},setTimeout,clearTimeout,requestAnimationFrame(){},matchMedia:()=>({matches:false}),fetch:async(url,opts)=>{calls.push({url,opts});if(url==='/api/chat'&&chatPromise)return chatPromise;if(url==='/api/transcribe'&&transcribeResponse)return transcribeResponse;return Response.json(url==='/api/status'?{ok:true,ai_configured:true}:url==='/api/speech'?voiceStatus:url==='/api/transcribe'?{text:'Сколько будет два плюс два?'}:{answer:'Ответ **готов**. $$x=2$$'})}};
  context.TalgatAccount={id:"test-user"};context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync('web/app.js','utf8'),context);
- return {context,get,recorders,utterances,calls,flushStops(){while(pendingStops.length)pendingStops.shift()()},tick(level,elapsed=80){loud=level;now+=elapsed;interval?.()},endSpeech(){interval();loud=0;now+=4500;interval()},get stopped(){return stopped}};
+ return {context,get,recorders,utterances,calls,audioEvents,audioContexts,flushStops(){while(pendingStops.length)pendingStops.shift()()},tick(level,elapsed=80){loud=level;now+=elapsed;interval?.()},endSpeech(){interval();loud=0;now+=4500;interval()},get stopped(){return stopped}};
 }
 const settle=()=>new Promise(r=>setImmediate(r));
 test('recorded speech is transcribed server-side, answered and listened for again',async()=>{
@@ -107,4 +107,35 @@ test('personal dialog UI preserves previous chat and sends only the opened conve
 test('manual completion UI and handlers are removed, and zero cannot disable automatic replies',async()=>{
  const html=fs.readFileSync('web/index.html','utf8'),source=fs.readFileSync('web/app.js','utf8');assert.equal(html.includes('speech-finish'),false);assert.equal(html.includes('Я закончил'),false);assert.equal(source.includes('speech-finish'),false);
  const a=setup();await settle();vm.runInContext('prefs.listenPause=0;applyPrefs()',a.context);assert.equal(a.get('listen-pause').value,'2');assert.equal(vm.runInContext('prefs.listenPause',a.context),2);
+});
+test('signed-out voice start explains the missing login before requesting microphone access',async()=>{
+ const a=setup();await settle();a.context.TalgatAccount={id:null};vm.runInContext('talk.onclick()',a.context);await settle();assert.equal(a.recorders.length,0);assert.equal(a.audioEvents.length,0);assert.equal(a.get('voice-feedback').dataset.phase,'auth');assert.equal(a.get('voice-login').hidden,false);assert.match(a.get('voice-error').textContent,/войдите/i);
+});
+test('audio context is resumed from the click before asynchronous microphone permission',async()=>{
+ const a=setup();await settle();vm.runInContext('talk.onclick()',a.context);await settle();assert.deepEqual(a.audioEvents.slice(0,2),['resume','microphone']);assert.equal(a.get('voice-feedback').dataset.phase,'listening');vm.runInContext('stopVoiceSession()',a.context);
+});
+test('very quiet speech produces visible feedback and an automatic reply',async()=>{
+ const a=setup();await settle();vm.runInContext('talk.onclick()',a.context);await settle();a.tick(.0018);assert.ok(Number(a.get('voice-meter')['aria-valuenow'])>20);assert.match(a.get('voice-detail').textContent,/речь слышна/);a.tick(0,2200);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
+});
+test('speech provider failure keeps the answer in chat and resumes listening without changing voice',async()=>{
+ const a=setup({voiceStatus:{providers:{heygen:{configured:true}}}});await settle();a.context.TalgatNeural={NeuralVoice:class{constructor(d){this.d=d}stop(){}speak(){this.d.onError(Error('Сервис голоса недоступен'))}}};
+ vm.runInContext('talk.onclick()',a.context);await settle();a.endSpeech();await settle();await settle();assert.equal(vm.runInContext('history.at(-1).role',a.context),'assistant');assert.equal(vm.runInContext('voiceSession',a.context),true);assert.equal(a.recorders.length,2);assert.match(a.get('voice-error').textContent,/озвучка не сработала/);assert.equal(a.get('voice-audio-retry').hidden,false);assert.equal(vm.runInContext('prefs.engine',a.context),'heygen');vm.runInContext('stopVoiceSession()',a.context);
+});
+test('an unavailable selected voice does not block microphone and text answers',async()=>{
+ const a=setup();await settle();vm.runInContext('prefs.engine="heygen";talk.onclick()',a.context);await settle();assert.equal(a.recorders.length,1);a.endSpeech();await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));assert.equal(a.utterances.length,0);assert.equal(vm.runInContext('voiceSession',a.context),true);vm.runInContext('stopVoiceSession()',a.context);
+});
+test('transcription authentication errors stay visible with an account link',async()=>{
+ const a=setup({transcribeResponse:Response.json({error:'Войдите в аккаунт'},{status:401})});await settle();vm.runInContext('talk.onclick()',a.context);await settle();a.endSpeech();await settle();await settle();assert.equal(a.get('voice-feedback').dataset.phase,'auth');assert.equal(a.get('voice-login').hidden,false);assert.match(a.get('voice-error').textContent,/Войдите/);assert.equal(a.calls.some(c=>c.url==='/api/chat'),false);
+});
+test('one audio context is reused across turns and closed when the conversation stops',async()=>{
+ const a=setup({instantSpeech:true});await settle();vm.runInContext('talk.onclick()',a.context);await settle();a.endSpeech();await settle();await settle();assert.equal(a.recorders.length,2);assert.equal(a.audioContexts.length,1);assert.equal(a.audioContexts[0].state,'running');vm.runInContext('stopVoiceSession()',a.context);assert.equal(a.audioContexts[0].state,'closed');
+});
+test('expired session is refreshed once before retrying the same protected request',async()=>{
+ const a=setup();await settle();let refreshes=0,attempts=0;a.context.TalgatRefreshSession=async()=>{refreshes++;return true};a.context.fetch=async()=>{attempts++;return Response.json(attempts===1?{error:'expired'}:{text:'Готово'},{status:attempts===1?401:200})};const result=await vm.runInContext('protectedFetch("/api/transcribe",{method:"POST",body:"same-body"})',a.context);assert.equal(result.status,200);assert.equal(refreshes,1);assert.equal(attempts,2);
+});
+test('refresh failure does not loop or retry provider errors',async()=>{
+ const a=setup();await settle();let attempts=0,refreshes=0;a.context.TalgatRefreshSession=async()=>{refreshes++;return false};a.context.fetch=async()=>{attempts++;return Response.json({error:'expired'},{status:401})};assert.equal((await vm.runInContext('protectedFetch("/api/chat",{})',a.context)).status,401);assert.equal(attempts,1);assert.equal(refreshes,1);a.context.fetch=async()=>Response.json({error:'provider'},{status:429});assert.equal((await vm.runInContext('protectedFetch("/api/chat",{})',a.context)).status,429);assert.equal(refreshes,1);
+});
+test('a protected request is never replayed in a different account after refresh',async()=>{
+ const a=setup();await settle();let attempts=0;a.context.fetch=async()=>{attempts++;return Response.json({error:'expired'},{status:401})};a.context.TalgatRefreshSession=async()=>{a.context.TalgatAccount={id:'different-user'};return true};assert.equal((await vm.runInContext('protectedFetch("/api/chat",{})',a.context)).status,401);assert.equal(attempts,1);
 });

@@ -1,18 +1,25 @@
-import {getUser,getSettings,handleAuthCallback,signup,login,logout,oauthLogin,acceptInvite,requestPasswordRecovery,updateUser,onAuthChange} from '@netlify/identity';
+import {createSessionRefresher} from './session.mjs';
+import {getUser,getSettings,handleAuthCallback,signup,login,logout,oauthLogin,acceptInvite,requestPasswordRecovery,updateUser,onAuthChange,refreshSession} from '@netlify/identity';
 const $=id=>document.getElementById(id), el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n};
 let account=null,callback=null,lastIdentity=undefined;
+const refreshIdentity=createSessionRefresher({getUser,refreshSession});
+window.TalgatRefreshSession=async(expected=window.TalgatAccount?.id)=>{
+ if(!expected||window.TalgatAccount?.id&&window.TalgatAccount.id!==expected)return false;
+ const refreshed=await refreshIdentity(expected);
+ return refreshed&&(!window.TalgatAccount?.id||window.TalgatAccount.id===expected);
+};
 function status(message){const n=$('account-status');if(n)n.textContent=message;else console.info(message)}
-async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin'});let data;try{data=await r.json()}catch{throw Error('Сервис временно недоступен. Повторите позже.')}if(!r.ok)throw Error(data.error||'Не удалось выполнить запрос');return data}
+async function api(path,body){const options={method:body?'POST':'GET',headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin'};let r=await fetch(path,options);if(r.status===401){const known=(await getUser())?.id;if(known&&await window.TalgatRefreshSession(known)&&(await getUser())?.id===known)r=await fetch(path,options)}let data;try{data=await r.json()}catch{throw Error('Сервис временно недоступен. Повторите позже.')}if(!r.ok)throw Error(data.error||'Не удалось выполнить запрос');return data}
 function button(text,fn){const b=el('button',text);b.type='button';b.onclick=async()=>{b.disabled=true;try{await fn()}catch(e){status(e.message)}finally{b.disabled=false}};return b}
 function link(text,url){const a=el('a',text);a.href=url;return a}
 function safeContact(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password?u.href:null}catch{return null}}
 function walletView(w){const box=el('div');if(w.access?.free){box.append(el('strong',w.access.kind==='owner'?'Полный доступ владельца':'Полный доступ по приглашению'),el('p','Все функции доступны бесплатно, без подписки и без срока окончания.'),el('p','Действуют общие технические ограничения и дневной бюджет сервиса. Личные тарифные лимиты не применяются.'));return box}box.append(el('p',`Тариф: ${w.plan==='basic'?'Базовый':'Пробный'}. До ${new Date(w.expires_at).toLocaleString('ru-RU')}.`));for(const [name,k] of [['Текст','text'],['Изображения','image'],['Записи речи','recording'],['Символы озвучки','speech']])box.append(el('p',`${name}: осталось ${Math.max(0,w[k+'_limit']-w[k+'_used'])} из ${w[k+'_limit']}`));return box}
 async function refresh(){
- const user=await getUser();account=null;
- if(user?.confirmedAt){try{account=await api('/api/account')}catch(e){status(e.message)}}
+ const user=await getUser();account=null;let accountError=null;
+ if(user?.confirmedAt){try{account=await api('/api/account')}catch(e){accountError=e.message;status(e.message)}}
  const id=account?.user?.id||null;
  if(lastIdentity!==undefined&&lastIdentity!==id){location.reload();return}lastIdentity=id;
- window.TalgatAccount={id,owner:account?.user?.owner===true};
+ window.TalgatAccount={id,owner:account?.user?.owner===true,error:accountError};
  window.TalgatSwitchAccount?.(id);window.dispatchEvent(new CustomEvent('talgat-account-changed',{detail:window.TalgatAccount}));
  document.documentElement.classList.remove('account-loading');
  const badge=$('account-badge');if(badge)badge.textContent=account?'Аккаунт и лимиты':'Войти / тарифы';
