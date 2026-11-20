@@ -1,4 +1,4 @@
-import {reasoningOptions,decisionInstructions} from "./reasoning-policy.mjs";
+import {reasoningOptions,decisionInstructions} from "./lib/reasoning-policy.mjs";
 import {verifiedFractionQuiz} from "./fraction-quiz.mjs";
 // Talgat AI 2.0 — server-side Groq proxy. Never expose GROQ_API_KEY to the browser.
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}});
