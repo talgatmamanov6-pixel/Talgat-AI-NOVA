@@ -21,7 +21,7 @@ let voiceError='',lastSpokenSource='',deviceSpeechTimer=null,sharedAudioContext=
 function voiceFeedback(phase,detail='',level=0){
  const panel=$("voice-feedback"),title=$("voice-phase"),note=$("voice-detail"),meter=$("voice-meter");
  if(!panel||!title)return;
- panel.dataset.phase=phase;title.textContent=({idle:'Готов к разговору',permission:'Включаю микрофон',listening:'Слушаю вас',pause:'Пауза — скоро отвечу',transcribing:'Распознаю речь',thinking:'Готовлю ответ',preparing:'Готовлю голос',speaking:'Отвечаю',error:'Нужна ваша помощь',auth:'Войдите для разговора'})[phase]||phase;
+ panel.dataset.phase=phase;const label=({idle:'Готов к разговору',permission:'Включаю микрофон',listening:'Слушаю вас',pause:'Пауза — скоро отвечу',transcribing:'Распознаю речь',thinking:'Готовлю ответ',preparing:'Готовлю голос',speaking:'Отвечаю',error:'Нужна ваша помощь',auth:'Войдите для разговора'})[phase]||phase;if(title.textContent!==label)title.textContent=label;
  if(note)note.textContent=detail;if(meter){meter.style.setProperty('--voice-level',String(Math.max(0,Math.min(1,level))));meter.setAttribute('aria-valuenow',String(Math.round(level*100)))}
  const login=$("voice-login");if(login)login.hidden=phase!=='auth';
 }
@@ -251,7 +251,7 @@ talk.onclick=()=>{
 $("stage-voice").onclick=()=>talk.onclick();
 $("voice-retry").onclick=()=>{stopVoiceSession();talk.onclick()};
 $("voice-audio-retry").onclick=()=>{if(!voiceAccountReady()||!lastSpokenSource)return;clearVoiceError();voice=true;say(lastSpokenSource)};
-window.addEventListener('talgat-account-changed',()=>{if(!voiceSession&&!recognition)voiceFeedback(window.TalgatAccount?.id?'idle':'auth',window.TalgatAccount?.id?'Нажмите «Начать разговор».':'Войдите в аккаунт для распознавания и ответа.');});
+window.addEventListener('talgat-account-changed',()=>{if(!voiceSession&&!recognition)voiceFeedback(window.TalgatAccount?.id?'idle':'auth',window.TalgatAccount?.error||(window.TalgatAccount?.id?'Нажмите «Начать разговор».':'Войдите в аккаунт для распознавания и ответа.'));});
 const mic=document.createElement('button');mic.id='mic';mic.textContent="🎙 Диктовка";mic.title="Запись и распознавание через Whisper";mic.onclick=()=>{if(recognition){recognition.stop();return}if(voiceSession)stopVoiceSession();captureVoice(true)};actions.append(mic);
 function previewPage(source){
  const dialog=document.createElement('dialog');dialog.className='settings';

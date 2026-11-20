@@ -59,4 +59,4 @@ try{
  if($('recovery'))$('recovery').onclick=async()=>{try{await requestPasswordRecovery($('email').value.trim());status('Если аккаунт существует, ссылка восстановления отправлена на email.')}catch(e){status(e.message)}};
  onAuthChange(()=>refresh().catch(e=>status(e.message)));
  await refresh();await offers();await owner();
-}catch(e){document.documentElement.classList.remove('account-loading');status(e.message||'Не удалось подключить вход. Повторите позже.')}
+}catch(e){const error=e.message||'Не удалось подключить вход. Повторите позже.';window.TalgatAccount={id:null,owner:false,error};window.TalgatSwitchAccount?.(null);window.dispatchEvent(new CustomEvent('talgat-account-changed',{detail:window.TalgatAccount}));document.documentElement.classList.remove('account-loading');status(error)}
