@@ -1,15 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 function setup({denied=false,instantSpeech=false,delayedStop=false,voiceStatus={}}={}){
- const elements=new Map(),recorders=[],utterances=[],calls=[],pendingStops=[];let interval,now=1000,loud=true,stopped=0;
+ const elements=new Map(),recorders=[],utterances=[],calls=[],pendingStops=[];let interval,now=1000,loud=.1,stopped=0;
  function el(){return {value:'',textContent:'',dataset:{},style:{setProperty(){}},classList:{add(){},remove(){},toggle(){}},append(){},before(){},replaceChildren(){},remove(){},focus(){},scrollIntoView(){},setAttribute(k,v){this[k]=v},addEventListener(k,f){this[k]=f},querySelectorAll(){return []},getBoundingClientRect(){return {width:0,height:0}}}}
  const get=id=>{if(!elements.has(id))elements.set(id,el());return elements.get(id)};get('stage-voice').lastElementChild=el();
  class Recorder{static isTypeSupported(){return true}constructor(){recorders.push(this);this.mimeType='audio/webm';this.state='inactive'}start(){this.state='recording'}stop(){this.state='inactive';this.ondataavailable({data:new Blob(['recorded voice '.repeat(30)])});if(delayedStop)pendingStops.push(()=>this.onstop());else this.onstop()}}
- class AudioContext{async resume(){}async close(){}createMediaStreamSource(){return {connect(){}}}createAnalyser(){return {fftSize:1024,getFloatTimeDomainData(a){a.fill(loud?.1:0)}}}}
+ class AudioContext{async resume(){}async close(){}createMediaStreamSource(){return {connect(){}}}createAnalyser(){return {fftSize:1024,getFloatTimeDomainData(a){a.fill(loud)}}}}
  const document={getElementById:get,body:el(),documentElement:el(),createElement:el,querySelector:()=>get('actions'),querySelectorAll:()=>[]};
  const synth={cancel(){},getVoices(){return []},speak(u){utterances.push(u);u.onstart?.();if(instantSpeech)u.onend?.()}};
  const context={document,console,Response,Request,FormData,Blob,URL,AbortController,TypeError,Float32Array,innerHeight:800,performance:{now:()=>now},addEventListener(){},navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error('denied'),{name:'NotAllowedError'});return {getTracks:()=>[{stop(){stopped++}}]}}}},AudioContext,MediaRecorder:Recorder,localStorage:{getItem(){return null},setItem(){}},SpeechSynthesisUtterance:class{constructor(text){this.text=text}},speechSynthesis:synth,setInterval(f){interval=f;return 1},clearInterval(){interval=null},setTimeout,clearTimeout,requestAnimationFrame(){},matchMedia:()=>({matches:false}),fetch:async(url,opts)=>{calls.push({url,opts});return Response.json(url==='/api/status'?{ok:true,ai_configured:true}:url==='/api/speech'?voiceStatus:url==='/api/transcribe'?{text:'Сколько будет два плюс два?'}:{answer:'Ответ **готов**. $$x=2$$'})}};
  context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync('web/app.js','utf8'),context);
- return {context,get,recorders,utterances,calls,flushStops(){while(pendingStops.length)pendingStops.shift()()},endSpeech(){interval();loud=false;now+=2000;interval()},get stopped(){return stopped}};
+ return {context,get,recorders,utterances,calls,flushStops(){while(pendingStops.length)pendingStops.shift()()},tick(level,elapsed=80){loud=level;now+=elapsed;interval?.()},endSpeech(){interval();loud=0;now+=4500;interval()},get stopped(){return stopped}};
 }
 const settle=()=>new Promise(r=>setImmediate(r));
 test('recorded speech is transcribed server-side, answered and listened for again',async()=>{
@@ -58,4 +58,19 @@ test('the approved HeyGen voice becomes default once and later voice selections 
 });
 test('an unconfigured HeyGen voice cannot silently become device playback',async()=>{
  const a=setup();await settle();vm.runInContext('prefs.engine="heygen";voice=true;say("Привет")',a.context);assert.equal(a.utterances.length,0);assert.match(a.get('status').textContent,/не подключён/);
+});
+
+
+test('quiet speech and a thinking pause do not end the turn early',async()=>{
+ const a=setup();await settle();vm.runInContext('talk.onclick()',a.context);await settle();
+ a.tick(.009);a.tick(0,1800);assert.equal(a.recorders[0].state,'recording');assert.equal(a.calls.some(c=>c.url==='/api/transcribe'),false);
+ a.tick(.009,80);a.tick(0,4200);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
+});
+test('manual finish mode never sends during long pauses and finishes on request',async()=>{
+ const a=setup();await settle();vm.runInContext('prefs.listenPause=0;talk.onclick()',a.context);await settle();a.tick(.02);a.tick(0,12000);
+ assert.equal(a.recorders[0].state,'recording');assert.equal(a.calls.some(c=>c.url==='/api/chat'),false);a.get('speech-finish').onclick();await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
+});
+test('speech continues past 25 seconds; the two-minute limit never auto-answers a cut sentence',async()=>{
+ const a=setup();await settle();vm.runInContext('talk.onclick()',a.context);await settle();a.tick(.02,26000);assert.equal(a.recorders[0].state,'recording');
+ a.tick(.02,95000);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/transcribe'));assert.equal(a.calls.some(c=>c.url==='/api/chat'),false);assert.equal(vm.runInContext('voiceSession',a.context),false);assert.match(a.get('question').value,/Сколько/);assert.match(a.get('status').textContent,/2 минуты/);
 });

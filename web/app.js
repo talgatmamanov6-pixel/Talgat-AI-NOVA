@@ -65,7 +65,7 @@ function cloudVoice(){return ['heygen','neural','fish','qwen'].includes(prefs.en
 function voiceReady(){return prefs.engine==='heygen'?heygenConfigured:prefs.engine==='qwen'?qwenConfigured:prefs.engine==='fish'?fishConfigured:neuralConfigured}
 checkNeural();
 function stopOutput(){outputToken++;outputActive=false;neuralVoice?.stop();window.speechSynthesis?.cancel?.()}
-function stopCapture(){recordingToken++;recognition?.abort?.();recognition=null;voiceController?.abort();voiceController=null}
+function stopCapture(){recordingToken++;recognition?.abort?.();recognition=null;voiceController?.abort();voiceController=null;$("speech-finish").hidden=true}
 function say(source){
   if(!voice)return;
   if(recognition)stopCapture();
@@ -143,16 +143,16 @@ async function captureVoice(dictation){
  if(recognition||busy)return;
  stopOutput();
  if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){stopVoiceSession();$("status").textContent="Запись микрофона не поддерживается. Откройте сайт в современном браузере.";return}
- const token=++recordingToken;let stream,audioContext,recorder,watchdog,cancelled=false,spoken=false,settled=false;
+ const token=++recordingToken;let stream,audioContext,recorder,watchdog,cancelled=false,spoken=false,settled=false,reachedLimit=false;
  recognition={abort:()=>{cancelled=true;if(recorder?.state==="recording")recorder.stop();else stream?.getTracks().forEach(t=>t.stop())},stop:()=>{if(recorder?.state==="recording")recorder.stop()}};
- const cleanup=()=>{clearInterval(watchdog);stream?.getTracks().forEach(t=>t.stop());audioContext?.close().catch(()=>{});document.documentElement.style.setProperty("--audiolevel","0")};
+ const cleanup=()=>{clearInterval(watchdog);if(token===recordingToken)$("speech-finish").hidden=true;stream?.getTracks().forEach(t=>t.stop());audioContext?.close().catch(()=>{});document.documentElement.style.setProperty("--audiolevel","0")};
  try{
   $("status").textContent="Разрешите доступ к микрофону…";stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
   if(token!==recordingToken||cancelled){cleanup();return}
   const AudioContext=window.AudioContext||window.webkitAudioContext;audioContext=new AudioContext();await audioContext.resume();if(token!==recordingToken||cancelled){cleanup();return}
   const analyser=audioContext.createAnalyser();analyser.fftSize=1024;audioContext.createMediaStreamSource(stream).connect(analyser);
   const samples=new Float32Array(analyser.fftSize),types=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'],mime=types.find(t=>MediaRecorder.isTypeSupported(t));
-  recorder=new MediaRecorder(stream,mime?{mimeType:mime,audioBitsPerSecond:48000}:{});const chunks=[];const started=performance.now();let lastSpeech=started;
+  recorder=new MediaRecorder(stream,mime?{mimeType:mime,audioBitsPerSecond:48000}:{});const chunks=[];const started=performance.now();let lastSpeech=started,noiseFloor=.002;
   recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
   recorder.onerror=()=>{cancelled=true;cleanup();if(token!==recordingToken)return;stopVoiceSession();$("status").textContent="Не удалось записать микрофон. Попробуйте ещё раз."};
   recorder.onstop=async()=>{
@@ -165,18 +165,22 @@ async function captureVoice(dictation){
    const transcriptionController=new AbortController();voiceController=transcriptionController;const deadline=setTimeout(()=>transcriptionController.abort(),30000);
    try{
     const res=await fetch('/api/transcribe',{method:'POST',body:form,signal:transcriptionController.signal});const data=await readJson(res);
-    if(token!==recordingToken)return;if(!res.ok)throw new Error(data.error||'Не удалось распознать речь');
+    if(token!==recordingToken)return;if(!res.ok){const error=new Error(data.error||'Не удалось распознать речь');error.status=res.status;throw error}
     $("question").value=data.text;document.body.dataset.state="idle";
-    if(dictation){$("status").textContent="Речь распознана. Можно отправить или отредактировать.";$("question").focus()}else{await send()}
-   }catch(e){if(token===recordingToken){stopVoiceSession();$("status").textContent=e.name==='AbortError'?'Распознавание остановлено.':e.message}}finally{clearTimeout(deadline);if(voiceController===transcriptionController)voiceController=null}
+    if(dictation||reachedLimit){if(reachedLimit)stopVoiceSession();$("status").textContent=reachedLimit?"Записаны 2 минуты речи. Проверьте текст и нажмите «Отправить» — ответ ещё не начат.":"Речь распознана. Можно отправить или отредактировать.";$("question").focus()}else{await send()}
+   }catch(e){if(token===recordingToken){if(e.status===422&&voiceSession){document.body.dataset.state='idle';$("status").textContent=e.message+" Слушаю ещё раз…";setTimeout(startListening,1000)}else{stopVoiceSession();$("status").textContent=e.name==='AbortError'?'Распознавание остановлено.':e.message}}}finally{clearTimeout(deadline);if(voiceController===transcriptionController)voiceController=null}
   };
-  recorder.start(250);document.body.dataset.state="listening";$("status").textContent=dictation?"Диктовка: говорите…":"Слушаю вас…";
+  recorder.start(250);$("speech-finish").hidden=false;document.body.dataset.state="listening";$("status").textContent="Слушаю. Не торопитесь; закончить можно кнопкой «Я закончил».";
   watchdog=setInterval(()=>{
    if(token!==recordingToken||cancelled){if(recorder.state==='recording')recorder.stop();return}
    analyser.getFloatTimeDomainData(samples);const rms=Math.sqrt(samples.reduce((n,x)=>n+x*x,0)/samples.length),now=performance.now();
    document.documentElement.style.setProperty('--audiolevel',String(Math.min(1,rms*12)));
-   if(rms>.018){spoken=true;lastSpeech=now}
-   if((spoken&&now-lastSpeech>1200&&now-started>1600)||now-started>25000||(!spoken&&now-started>8000)){if(recorder.state==='recording')recorder.stop()}
+   // Track quiet background only; do not learn the speaker's voice as noise.
+   const threshold=Math.max(.006,Math.min(.02,noiseFloor*2.5));
+   if(rms>threshold){spoken=true;lastSpeech=now}else{noiseFloor=noiseFloor*.96+Math.min(rms,.008)*.04}
+   const pause=Number(prefs.listenPause??4)*1000;
+   reachedLimit=now-started>=120000;
+   if((spoken&&pause>0&&now-lastSpeech>pause&&now-started>2000)||reachedLimit||(!spoken&&now-started>30000)){if(recorder.state==='recording')recorder.stop()}
   },80);
  }catch(e){cleanup();if(token===recordingToken){recognition=null;stopVoiceSession();$("status").textContent=e.name==='NotAllowedError'?'Разрешите доступ к микрофону в настройках браузера.':e.name==='NotFoundError'?'Микрофон не найден.':'Не удалось включить запись микрофона.'}}
 }
@@ -187,6 +191,7 @@ talk.onclick=()=>{
  $("stage-voice").lastElementChild.textContent="Завершить разговор";closeNavigation();startListening();
 };
 $("stage-voice").onclick=()=>talk.onclick();
+$("speech-finish").onclick=()=>recognition?.stop?.();
 const mic=document.createElement('button');mic.id='mic';mic.textContent="🎙 Диктовка";mic.title="Запись и распознавание через Whisper";mic.onclick=()=>{if(recognition){recognition.stop();return}if(voiceSession)stopVoiceSession();captureVoice(true)};actions.append(mic);
 function previewPage(source){
  const dialog=document.createElement('dialog');dialog.className='settings';
@@ -250,20 +255,21 @@ for(const mode of ['chat','code'])$("mode-"+mode).onclick=()=>{workMode=mode;for
 const fitViewport=()=>document.documentElement.style.setProperty('--appheight',(window.visualViewport?.height||innerHeight)+'px');window.visualViewport?.addEventListener('resize',fitViewport);window.addEventListener('resize',fitViewport);fitViewport();
 // Local preferences never contain provider credentials.
 const prefsKey="talgat-ui-preferences";
-let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device"};
+let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
+  prefs.listenPause=[0,4,6,8].includes(Number(prefs.listenPause))?Number(prefs.listenPause):4;
   prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['heygen','neural','fish','deep','qwen'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
   document.body.classList.toggle("light",prefs.theme==="light");
   document.documentElement.style.setProperty("--size",Math.max(14,Math.min(20,Number(prefs.font)||16))+"px");
-  $("speech-engine").value=prefs.engine;
+  $("speech-engine").value=prefs.engine;$("listen-pause").value=String(prefs.listenPause);
   $("speech-language").value=["ru","kk","en"].includes(prefs.language)?prefs.language:"ru";
   $("theme").value=prefs.theme==="light"?"light":"dark";
   $("memory").value=typeof prefs.memory==="string"?prefs.memory:"";$("font-size").value=prefs.font;$("voice-rate").value=prefs.rate;$("motion").value=prefs.motion;
   try{localStorage.setItem(prefsKey,JSON.stringify(prefs))}catch{}
 }
 applyPrefs();
-for(const [id,key] of [["speech-engine","engine"],["speech-language","language"],["theme","theme"],["font-size","font"],["voice-rate","rate"],["motion","motion"],["memory","memory"]])$(id).addEventListener("input",()=>{prefs[key]=$(id).value;applyPrefs()});
+for(const [id,key] of [["listen-pause","listenPause"],["speech-engine","engine"],["speech-language","language"],["theme","theme"],["font-size","font"],["voice-rate","rate"],["motion","motion"],["memory","memory"]])$(id).addEventListener("input",()=>{prefs[key]=$(id).value;applyPrefs()});
 $("settings-open").onclick=()=>{$("settings").showModal();closeNavigation()};
 $("settings-close").onclick=()=>$("settings").close();
 $("settings").addEventListener("click",e=>{if(e.target===$("settings")){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close()}});
