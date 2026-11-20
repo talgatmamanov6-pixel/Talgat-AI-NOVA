@@ -26,7 +26,12 @@ class NeuralVoice{
     if(token!==this.token)return;this.deps.onState('preparing');const result=await prepare(index);if(token!==this.token)return;if(result.error)throw result.error;
     if(index+1<parts.length)prepare(index+1); // One chunk ahead; never queues an entire answer.
     if(this.url)this.deps.revokeURL(this.url);this.url=this.deps.createURL(result.blob);const audio=new this.deps.Audio(this.url);this.player=audio;audio.playbackRate=rate||1;this.deps.onPlayer?.(audio);
-    await new Promise((resolve,reject)=>{this.release=resolve;audio.onended=resolve;audio.onerror=()=>reject(new Error('Не удалось воспроизвести звук.'));audio.onplaying=()=>{if(token===this.token)this.deps.onState('speaking')};Promise.resolve(audio.play()).catch(()=>reject(new Error('Нажмите «Озвучить», чтобы браузер разрешил воспроизведение.')))});
+    await new Promise((resolve,reject)=>{
+     let settled=false;const timer=setTimeout(()=>finish(new Error('Воспроизведение не запустилось или зависло. Нажмите «Повторить озвучку».')),this.deps.playTimeoutMs||Math.max(25000,parts[index].length*160+10000));
+     const finish=error=>{if(settled)return;settled=true;clearTimeout(timer);error?reject(error):resolve()};
+     this.release=()=>finish();audio.onended=()=>finish();audio.onerror=()=>finish(new Error('Не удалось воспроизвести звук.'));audio.onplaying=()=>{if(token===this.token)this.deps.onState('speaking')};
+     Promise.resolve().then(()=>audio.play()).catch(()=>finish(new Error('Браузер не разрешил звук. Нажмите «Повторить озвучку».')))
+    });
     if(token!==this.token)return;
    }
    this.stop();this.deps.onEnd();

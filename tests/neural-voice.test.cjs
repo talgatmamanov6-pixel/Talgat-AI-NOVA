@@ -22,3 +22,6 @@ test('sentence mode starts with the first sentence and prefetches only one chunk
  const a=setup(async(url,opts)=>{calls.push(JSON.parse(opts.body));if(calls.length===1)return {ok:true,blob:async()=>new Blob(['audio'],{type:'audio/wav'})};return new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>{prefetchAborted=true;reject(Object.assign(new Error('stopped'),{name:'AbortError'}))}))});
  a.voice.deps.lowLatency=true;const running=a.voice.speak('Добрый день. Я вас слушаю. Чем помочь?','ru',1,'fish');await settle();assert.equal(calls[0].text,'Добрый день.');assert.equal(calls[0].provider,'fish');assert.equal(calls.length,2);assert.equal(a.players.length,1);a.voice.stop();await running;await settle();assert.equal(prefetchAborted,true);assert.equal(a.players.length,1);assert.equal(a.ended,0);
 });
+test('audio playback that never starts or ends times out instead of freezing the dialog',async()=>{
+ const a=setup(async()=>new Response('audio',{headers:{'content-type':'audio/mpeg'}}));a.voice.deps.playTimeoutMs=15;await a.voice.speak('Тест','ru',1);assert.match(a.errors[0],/зависло/);assert.equal(a.ended,0);
+});
