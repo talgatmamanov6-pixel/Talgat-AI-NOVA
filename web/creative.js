@@ -36,7 +36,7 @@ get('creative-form').onsubmit=event=>{
  if(busy){get('creative-status').textContent='Дождитесь текущего ответа или нажмите «Стоп» в чате.';return}
  const skill=window.TalgatSkills.items.find(item=>item.id===kind);if(!skill)return;
  const prompt=window.TalgatSkills.build(kind,{topic,language:({ru:'русский',kk:'қазақша',en:'English'})[prefs.language]||'русский'});
- dialog.close();get(skill.category==='Разработка'?'mode-code':'mode-chat').click();send({prompt,display:skill.title+'\n'+topic});
+ dialog.close();get(skill.category==='Разработка'?'mode-code':'mode-chat').click();send({prompt,display:skill.title+'\n'+topic,artifact:true});
 };
 window.TalgatCreative={route(question){
  if(!/^\/image\s+|^(?:создай|сгенерируй|нарисуй)\s+(?:мне\s+)?(?:изображение|картинку|иллюстрацию|фото|рендер|визуализацию)(?=\s|[:,.!?-]|$)/iu.test(question))return false;

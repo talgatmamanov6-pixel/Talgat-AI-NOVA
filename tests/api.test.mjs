@@ -4,7 +4,7 @@ import handler from "../netlify/functions/api.mjs";
 
 test("code mode includes attached materials without changing system authority",async()=>{
  globalThis.Netlify={env:{get:name=>name==="GROQ_API_KEY"?"test-secret":undefined}};const original=globalThis.fetch;
- globalThis.fetch=async(url,options)=>{const sent=JSON.parse(options.body);assert.equal(sent.max_completion_tokens,16384);assert.match(sent.messages[0].content,/Режим разработки/);assert.equal(sent.messages[1].role,'user');assert.match(sent.messages[1].content,/const input = 7/);assert.equal(sent.messages.at(-1).content,'Объясни код');return Response.json({choices:[{message:{content:'Объяснение'}}]})};
+ globalThis.fetch=async(url,options)=>{const sent=JSON.parse(options.body);assert.equal(sent.max_completion_tokens,8192);assert.match(sent.messages[0].content,/Режим разработки/);assert.equal(sent.messages[1].role,'user');assert.match(sent.messages[1].content,/const input = 7/);assert.equal(sent.messages.at(-1).content,'Объясни код');return Response.json({choices:[{message:{content:'Объяснение'}}]})};
  try{const body=JSON.stringify({message:'Объясни код',mode:'code',materials:'const input = 7'});const res=await handler(new Request('https://site/api/chat',{method:'POST',body}));assert.equal(res.status,200)}finally{globalThis.fetch=original}
 });
 
@@ -71,7 +71,7 @@ test("provider 429 is reported as JSON 429",async()=>{
 });
 test('provider length cutoff is explicitly reported',async()=>{
  setKey('test-secret');const original=globalThis.fetch;
- globalThis.fetch=async(url,options)=>{assert.equal(JSON.parse(options.body).max_completion_tokens,16384);return Response.json({choices:[{message:{content:'Незаконченный ответ'},finish_reason:'length'}]})};
+ globalThis.fetch=async(url,options)=>{assert.equal(JSON.parse(options.body).max_completion_tokens,8192);return Response.json({choices:[{message:{content:'Незаконченный ответ'},finish_reason:'length'}]})};
  try{const data=await (await handler(request('/api/chat','POST',{message:'Создай длинный документ'}))).json();assert.equal(data.truncated,true)}finally{globalThis.fetch=original}
 });
 test('supported arithmetic quiz bypasses language model and does not expose credentials',async()=>{
@@ -93,7 +93,7 @@ test('assistant identity and actual tool limits survive voice mode, preferences 
 
 test('deep requests use genuine high effort and return only the final answer',async()=>{
  setKey('secret');const old=globalThis.fetch;
- globalThis.fetch=async(url,options)=>{const sent=JSON.parse(options.body);assert.equal(sent.reasoning_effort,'high');assert.equal(sent.reasoning_format,'hidden');assert.equal(sent.max_completion_tokens,16384);assert.match(sent.messages[0].content,/сравни подходящие варианты/);return Response.json({choices:[{message:{content:'Вариант Б лучше по заданным ограничениям.',reasoning:'private analysis'}}],model:'openai/gpt-oss-120b'})};
+ globalThis.fetch=async(url,options)=>{const sent=JSON.parse(options.body);assert.equal(sent.reasoning_effort,'high');assert.equal(sent.reasoning_format,'hidden');assert.equal(sent.max_completion_tokens,8192);assert.match(sent.messages[0].content,/сравни подходящие варианты/);return Response.json({choices:[{message:{content:'Вариант Б лучше по заданным ограничениям.',reasoning:'private analysis'}}],model:'openai/gpt-oss-120b'})};
  try{const res=await handler(request('/api/chat','POST',{message:'Выбери вариант по ограничениям'}));const data=await res.json();assert.equal(data.reasoning.effort,'high');assert.equal(JSON.stringify(data).includes('private analysis'),false)}finally{globalThis.fetch=old}
 });
 test('voice and quick modes limit effort while retaining the decision policy',async()=>{

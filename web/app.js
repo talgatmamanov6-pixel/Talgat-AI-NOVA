@@ -107,7 +107,7 @@ async function send(prepared){
   $("status").textContent=prefs.reasoningQuality==="quick"?"Готовлю ответ…":"Обдумываю задачу и проверяю вывод…";
   const timeout=setTimeout(()=>controller?.abort(),prefs.reasoningQuality!=="quick"&&!voiceSession?55000:35000);
   try{
-    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,reasoningQuality:prefs.reasoningQuality,search:Boolean($("web-search").checked),image:attachments[0]?.image,materials:attachments.filter(f=>f.text).map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
+    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,artifact:prepared?.artifact===true,reasoningQuality:prefs.reasoningQuality,search:Boolean($("web-search").checked),image:attachments[0]?.image,materials:attachments.filter(f=>f.text).map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
     const d=await readJson(r);
     if(!r.ok)throw new Error(d.error||"HTTP "+r.status);
     if(typeof d.answer!=="string"||!d.answer.trim())throw new Error("Модель вернула пустой ответ");
