@@ -1,5 +1,7 @@
 # Talgat AI Android 2.1
 
+Package `ai.talgat.studio` installs independently of legacy NOVA builds and preserves them.
+
 Personal installable Android build, Android 7.0+ (including Samsung Android 13).
 The app opens https://talgat-ai.netlify.app over HTTPS. AI, voice, image generation
 and server exports require internet and the existing hosted service. No model or

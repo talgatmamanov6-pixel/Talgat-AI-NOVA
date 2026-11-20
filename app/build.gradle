@@ -3,7 +3,7 @@ android {
  namespace 'kz.talgat.nova'
  compileSdk 35
  defaultConfig {
-  applicationId 'kz.talgat.nova'
+  applicationId 'ai.talgat.studio'
   minSdk 24
   targetSdk 35
   versionCode 21

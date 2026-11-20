@@ -43,7 +43,7 @@ public class PhoneSmokeTest {
   try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))) { image.compress(Bitmap.CompressFormat.PNG,100,out); }
  }
  @Test public void realSiteVoiceUploadAndDownloads() throws Exception {
-  try(ParcelFileDescriptor grant=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("pm grant kz.talgat.nova android.permission.RECORD_AUDIO")) { Thread.sleep(500); }
+  try(ParcelFileDescriptor grant=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("pm grant ai.talgat.studio android.permission.RECORD_AUDIO")) { Thread.sleep(500); }
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
    awaitJs(scenario,"Boolean(document.getElementById('creative-open') && window.__talgatAndroidDownloads)");
    evaluate(scenario,"document.getElementById('creative-open').click();true");

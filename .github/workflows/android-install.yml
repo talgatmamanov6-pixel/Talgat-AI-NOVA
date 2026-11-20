@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: android-install-${{ github.ref }}
+  group: android-install-${{ github.sha }}
   cancel-in-progress: true
 jobs:
   android:
@@ -28,10 +28,10 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Android 15 emulator smoke test
+      - name: Android 13 emulator smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 33
           arch: x86_64
           target: google_apis
           profile: pixel_2
@@ -40,7 +40,7 @@ jobs:
           script: |
             gradle --no-daemon connectedDebugAndroidTest
             mkdir -p android-proof
-            adb pull /sdcard/Android/data/kz.talgat.nova/files/proof android-proof/
+            adb pull /sdcard/Android/data/ai.talgat.studio/files/proof android-proof/
       - name: Verify APK signature and prepare download
         run: |
           mkdir -p android-dist
