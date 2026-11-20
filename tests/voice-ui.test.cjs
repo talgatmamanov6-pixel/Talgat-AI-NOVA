@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
-function setup({denied=false,instantSpeech=false,delayedStop=false,voiceStatus={}}={}){
+function setup({denied=false,instantSpeech=false,delayedStop=false,voiceStatus={},chatPromise=null}={}){
  const elements=new Map(),recorders=[],utterances=[],calls=[],pendingStops=[];let interval,now=1000,loud=.1,stopped=0;
  function el(){return {value:'',textContent:'',dataset:{},style:{setProperty(){}},classList:{add(){},remove(){},toggle(){}},append(){},before(){},replaceChildren(){},remove(){},focus(){},scrollIntoView(){},setAttribute(k,v){this[k]=v},addEventListener(k,f){this[k]=f},querySelectorAll(){return []},getBoundingClientRect(){return {width:0,height:0}}}}
  const get=id=>{if(!elements.has(id))elements.set(id,el());return elements.get(id)};get('stage-voice').lastElementChild=el();
@@ -7,7 +7,7 @@ function setup({denied=false,instantSpeech=false,delayedStop=false,voiceStatus={
  class AudioContext{async resume(){}async close(){}createMediaStreamSource(){return {connect(){}}}createAnalyser(){return {fftSize:1024,getFloatTimeDomainData(a){a.fill(loud)}}}}
  const document={getElementById:get,body:el(),documentElement:el(),createElement:el,querySelector:()=>get('actions'),querySelectorAll:()=>[]};
  const synth={cancel(){},getVoices(){return []},speak(u){utterances.push(u);u.onstart?.();if(instantSpeech)u.onend?.()}};
- const context={document,console,Response,Request,FormData,Blob,URL,AbortController,TypeError,Float32Array,innerHeight:800,performance:{now:()=>now},addEventListener(){},navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error('denied'),{name:'NotAllowedError'});return {getTracks:()=>[{stop(){stopped++}}]}}}},AudioContext,MediaRecorder:Recorder,localStorage:{getItem(){return null},setItem(){}},SpeechSynthesisUtterance:class{constructor(text){this.text=text}},speechSynthesis:synth,setInterval(f){interval=f;return 1},clearInterval(){interval=null},setTimeout,clearTimeout,requestAnimationFrame(){},matchMedia:()=>({matches:false}),fetch:async(url,opts)=>{calls.push({url,opts});return Response.json(url==='/api/status'?{ok:true,ai_configured:true}:url==='/api/speech'?voiceStatus:url==='/api/transcribe'?{text:'Сколько будет два плюс два?'}:{answer:'Ответ **готов**. $$x=2$$'})}};
+ const context={document,console,Response,Request,FormData,Blob,URL,AbortController,TypeError,Float32Array,innerHeight:800,performance:{now:()=>now},addEventListener(){},navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error('denied'),{name:'NotAllowedError'});return {getTracks:()=>[{stop(){stopped++}}]}}}},AudioContext,MediaRecorder:Recorder,localStorage:{getItem(){return null},setItem(){}},SpeechSynthesisUtterance:class{constructor(text){this.text=text}},speechSynthesis:synth,setInterval(f){interval=f;return 1},clearInterval(){interval=null},setTimeout,clearTimeout,requestAnimationFrame(){},matchMedia:()=>({matches:false}),fetch:async(url,opts)=>{calls.push({url,opts});if(url==='/api/chat'&&chatPromise)return chatPromise;return Response.json(url==='/api/status'?{ok:true,ai_configured:true}:url==='/api/speech'?voiceStatus:url==='/api/transcribe'?{text:'Сколько будет два плюс два?'}:{answer:'Ответ **готов**. $$x=2$$'})}};
  context.TalgatAccount={id:"test-user"};context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync('web/app.js','utf8'),context);
  return {context,get,recorders,utterances,calls,flushStops(){while(pendingStops.length)pendingStops.shift()()},tick(level,elapsed=80){loud=level;now+=elapsed;interval?.()},endSpeech(){interval();loud=0;now+=4500;interval()},get stopped(){return stopped}};
 }
@@ -76,6 +76,31 @@ test('speech continues past 25 seconds; the two-minute limit never auto-answers 
 });
 
 test('reasoning quality is normalized, persisted in controls and forwarded with the task',async()=>{
- const a=setup();await settle();vm.runInContext('prefs.reasoningQuality="invalid";applyPrefs()',a.context);assert.equal(a.get('reasoning-quality').value,'deep');
- a.get('question').value='Сравни варианты';await vm.runInContext('send()',a.context);assert.equal(JSON.parse(a.calls.find(c=>c.url==='/api/chat').opts.body).reasoningQuality,'deep');assert.match(a.get('status').textContent,/Ответ готов/);
+ const a=setup();await settle();vm.runInContext('prefs.reasoningQuality="invalid";applyPrefs()',a.context);assert.equal(a.get('reasoning-quality').value,'quick');
+ a.get('question').value='Сравни варианты';await vm.runInContext('send()',a.context);assert.equal(JSON.parse(a.calls.find(c=>c.url==='/api/chat').opts.body).reasoningQuality,'quick');assert.match(a.get('status').textContent,/Ответ готов/);
+});
+test('late answer from a previous account cannot appear in the next user conversation',async()=>{
+ let resolve;const pending=new Promise(r=>resolve=r);const a=setup({chatPromise:pending});await settle();a.get('question').value='Секрет первого пользователя';const sending=vm.runInContext('send()',a.context);await settle();a.context.TalgatAccount={id:'second-user'};vm.runInContext('TalgatSwitchAccount("second-user")',a.context);resolve(Response.json({answer:'Старый секретный ответ'}));await sending;assert.equal(vm.runInContext('history.length',a.context),0);assert.equal(a.get('question').value,'');assert.equal(vm.runInContext('busy',a.context),false);
+});
+test('quiet speech is heard and a thinking pause is not cut short',async()=>{
+ const a=setup();await settle();vm.runInContext('talk.onclick()',a.context);await settle();a.tick(.005);a.tick(0,2500);assert.equal(a.recorders[0].state,'recording');assert.equal(a.calls.some(c=>c.url==='/api/chat'),false);a.tick(.005);a.tick(0,4200);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
+});
+test('the optional two-second pause starts a reply faster, while manual mode remains available',async()=>{
+ const a=setup();await settle();vm.runInContext('prefs.listenPause=2;applyPrefs();talk.onclick()',a.context);await settle();a.tick(.02);a.tick(0,2150);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
+});
+test('instant voice playback resumes listening after transcription cleanup',async()=>{
+ const a=setup({instantSpeech:true});await settle();vm.runInContext('talk.onclick()',a.context);await settle();a.endSpeech();await settle();await settle();assert.equal(a.recorders.length,2);vm.runInContext('stopVoiceSession()',a.context);
+});
+test('quick default can be explicitly changed back to deep mode',async()=>{
+ const a=setup();await settle();assert.equal(vm.runInContext('prefs.reasoningQuality',a.context),'quick');vm.runInContext('prefs.reasoningQuality="deep";applyPrefs()',a.context);assert.equal(a.get('reasoning-quality').value,'deep');
+});
+test('a fresh authenticated account keeps the approved voice after provider setup resolves first',async()=>{
+ const a=setup({voiceStatus:{providers:{heygen:{configured:true}}}});await settle();vm.runInContext('TalgatSwitchAccount("fresh-user")',a.context);assert.equal(vm.runInContext('prefs.engine',a.context),'heygen');assert.equal(vm.runInContext('prefs.heygenVoiceVersion',a.context),1);
+});
+test('personal dialog UI preserves previous chat and sends only the opened conversation context',async()=>{
+ const a=setup();await settle();const data=new Map();a.context.localStorage={getItem:key=>data.get(key)||null,setItem:(key,value)=>data.set(key,value)};a.context.TalgatDialogs=require('../web/dialogs.js');
+ vm.runInContext('TalgatSwitchAccount("test-user")',a.context);a.get('question').value='Первый личный вопрос';await vm.runInContext('send()',a.context);const first=vm.runInContext('dialogStore.current()',a.context);
+ a.get('newchat').onclick();assert.equal(vm.runInContext('history.length',a.context),0);assert.equal(vm.runInContext('dialogStore.list().length',a.context),2);a.get('question').value='Второй личный вопрос';await vm.runInContext('send()',a.context);const secondRequest=JSON.parse(a.calls.filter(c=>c.url==='/api/chat')[1].opts.body);assert.equal(secondRequest.history.length,0);
+ a.context.selectedDialog=first;vm.runInContext('switchDialog(selectedDialog)',a.context);assert.equal(vm.runInContext('history[0].content',a.context),'Первый личный вопрос');
+ a.context.TalgatAccount={id:'other-user'};vm.runInContext('TalgatSwitchAccount("other-user")',a.context);assert.equal(vm.runInContext('history.length',a.context),0);assert.equal(vm.runInContext('dialogStore.list().length',a.context),1);
 });
