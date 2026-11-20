@@ -43,13 +43,14 @@ public class PhoneSmokeTest {
   try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))) { image.compress(Bitmap.CompressFormat.PNG,100,out); }
  }
  @Test public void realSiteVoiceUploadAndDownloads() throws Exception {
-  try(ParcelFileDescriptor grant=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("pm grant ai.talgat.studio android.permission.RECORD_AUDIO")) { Thread.sleep(500); }
+  InstrumentationRegistry.getInstrumentation().getUiAutomation().grantRuntimePermission("ai.talgat.studio","android.permission.RECORD_AUDIO");
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
    awaitJs(scenario,"Boolean(document.getElementById('creative-open') && window.__talgatAndroidDownloads)");
    evaluate(scenario,"document.getElementById('creative-open').click();true");
    awaitJs(scenario,"document.getElementById('creative').open"); screenshot("studio-android");
    evaluate(scenario,"document.getElementById('creative').close();navigator.mediaDevices.getUserMedia({audio:true}).then(s=>{s.getTracks().forEach(t=>t.stop());window.__micPassed=true;}).catch(e=>{window.__micFailure=e.name;});true");
-   awaitJs(scenario,"window.__micPassed===true");
+   awaitJs(scenario,"Boolean(window.__micPassed || window.__micFailure)");
+   assertEquals("Microphone failure: "+evaluate(scenario,"window.__micFailure"),"true",evaluate(scenario,"window.__micPassed===true"));
    // Detached anchors are how ZIP/Word/Excel exports are created in the app.
    evaluate(scenario,"(function(){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['Talgat Android export'],{type:'text/plain'}));a.download='talgat-test.txt';a.click();return true;})()");
    awaitPicker(); screenshot("native-save-picker");
