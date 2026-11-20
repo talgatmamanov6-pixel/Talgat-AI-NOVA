@@ -24,3 +24,9 @@ test('provider failures and non-image data never become a fake image or leak int
  const handler=imageHandler({configured:()=>true,model:()=> 'model',clientFactory:()=>({images:{generate:async()=> (async function*(){yield {type:'image_generation.completed',b64_json:Buffer.from('<html>error</html>').toString('base64')}})()}})});
  assert.equal((await events(await handler(request({prompt:'x'})))).at(-1).type,'error');
 });
+
+test('Gemini adapter uses runtime SDK, reference parts and image aspect ratio',async()=>{
+ const {geminiImageClient}=await import('../netlify/functions/lib/gemini-image.mjs');
+ const client=geminiImageClient({models:{generateContent:async request=>{assert.equal(request.model,'gemini-model');assert.equal(request.config.imageConfig.aspectRatio,'3:2');assert.equal(request.config.httpOptions.retryOptions.attempts,1);assert.equal(request.contents[0].parts[1].inlineData.data,jpeg);return {candidates:[{content:{parts:[{inlineData:{data:jpeg,mimeType:'image/jpeg'}}]}}]}}}});
+ const stream=await client.images.edit({model:'gemini-model',prompt:'Свет',size:'1536x1024',image:'data:image/jpeg;base64,'+jpeg},{signal:new AbortController().signal});for await(const event of stream){assert.equal(event.b64_json,jpeg);assert.equal(event.mime,'image/jpeg')}
+});

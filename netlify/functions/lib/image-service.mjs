@@ -13,7 +13,7 @@ export function imageHandler({configured,model,clientFactory,toImageFile}){
  return async request=>{
   if(request.method==='GET'){
    if(new URL(request.url).searchParams.get('capabilities')==='1'&&configured()){
-    try{const listing=await clientFactory().models.list({timeout:8000,maxRetries:0});return json({configured:true,model:model(),imageModels:(listing.data||[]).map(item=>item.id).filter(id=>typeof id==='string'&&id.startsWith('gpt-image')).slice(0,30)})}catch(error){return json({configured:true,model:model(),catalogAvailable:false,upstream_status:Number(error?.status)||null})}
+    try{const listing=await clientFactory().models.list({timeout:8000,maxRetries:0});return json({configured:true,model:model(),imageModels:(listing.data||[]).map(item=>item.id).filter(id=>typeof id==='string'&&/image|banana/.test(id)).slice(0,30)})}catch(error){return json({configured:true,model:model(),catalogAvailable:false,upstream_status:Number(error?.status)||null})}
    }
    return json({configured:Boolean(configured()),model:model(),supportsReference:true});
   }
@@ -45,8 +45,10 @@ export function imageHandler({configured,model,clientFactory,toImageFile}){
       if(event.type==='image_generation.completed'||event.type==='image_edit.completed'){
        const base64=event.b64_json;
        if(typeof base64!=='string'||base64.length>5000000||!/^[A-Za-z0-9+/]+={0,2}$/.test(base64))throw new Error('invalid_image');
-       const bytes=Buffer.from(base64,'base64');if(bytes.length<4||bytes[0]!==255||bytes[1]!==216||bytes[2]!==255)throw new Error('invalid_image');
-       emit({type:'image',base64,mime:'image/jpeg',model:chosen});complete=true;break;
+       const bytes=Buffer.from(base64,'base64'),mime=event.mime||'image/jpeg';
+       const valid=mime==='image/jpeg'?bytes[0]===255&&bytes[1]===216&&bytes[2]===255:mime==='image/png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):mime==='image/webp'?bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP':false;
+       if(bytes.length<8||!valid)throw new Error('invalid_image');
+       emit({type:'image',base64,mime,model:chosen});complete=true;break;
       }
      }
      if(!complete)throw new Error('missing_image');

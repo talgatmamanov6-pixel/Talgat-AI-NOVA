@@ -1,11 +1,11 @@
-import OpenAI,{toFile} from 'openai';
+import {GoogleGenAI} from '@google/genai';
 import {imageHandler} from './lib/image-service.mjs';
-// Current model verified against Netlify's Nov 4, 2026 image-model announcement.
-// Override only on the server when the provider catalog changes.
+import {geminiImageClient} from './lib/gemini-image.mjs';
+// Official model announcement: Netlify, Oct 6, 2026. Override server-side if needed.
 export default imageHandler({
- configured:()=>Boolean(process.env.OPENAI_API_KEY),
- model:()=>process.env.TALGAT_IMAGE_MODEL||'gpt-image-2.6-flare',
- clientFactory:()=>new OpenAI(),
- toImageFile:reference=>toFile(Buffer.from(reference.split(',')[1],'base64'),'reference.jpg',{type:'image/jpeg'})
+ configured:()=>Boolean(process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY),
+ model:()=>process.env.TALGAT_IMAGE_MODEL||'gemini-nano-banana-2.1',
+ clientFactory:()=>geminiImageClient(new GoogleGenAI({})),
+ toImageFile:async reference=>reference
 });
 export const config={path:'/api/images',rateLimit:{windowLimit:4,windowSize:180,aggregateBy:['ip','domain']}};
