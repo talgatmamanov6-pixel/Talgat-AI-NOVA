@@ -63,8 +63,14 @@ public class PhoneSmokeTest {
  }
  private void screenshot(String name) throws Exception {
   Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
-  File dir=new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null),"proof"); dir.mkdirs();
-  try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))) { image.compress(Bitmap.CompressFormat.PNG,100,out); }
+  android.content.ContentResolver resolver=InstrumentationRegistry.getInstrumentation().getTargetContext().getContentResolver();
+  android.content.ContentValues values=new android.content.ContentValues();
+  values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME,name+".png");
+  values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE,"image/png");
+  values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH,"Download/talgat-proof");
+  android.net.Uri uri=resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
+  assertNotNull(uri);
+  try(java.io.OutputStream out=resolver.openOutputStream(uri)) { assertNotNull(out); image.compress(Bitmap.CompressFormat.PNG,100,out); }
  }
  @Test public void realSiteVoiceUploadAndDownloads() throws Exception {
   InstrumentationRegistry.getInstrumentation().getUiAutomation().grantRuntimePermission("ai.talgat.studio","android.permission.RECORD_AUDIO");
@@ -82,7 +88,6 @@ public class PhoneSmokeTest {
    assertTrue("System Save button",clicked);
    String actual="";for(int i=0;i<30;i++){actual=savedContents();if(actual.equals("Talgat Android export"))break;Thread.sleep(300);}
    assertEquals("Talgat Android export",actual);
-   awaitJs(scenario,"document.hasFocus()");
    tap(scenario,"attach");
    awaitPicker(); screenshot("native-upload-picker");
    InstrumentationRegistry.getInstrumentation().getUiAutomation().performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK);
