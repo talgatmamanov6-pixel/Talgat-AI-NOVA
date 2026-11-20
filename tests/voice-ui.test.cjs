@@ -66,9 +66,8 @@ test('quiet speech and a thinking pause do not end the turn early',async()=>{
  a.tick(.009);a.tick(0,1800);assert.equal(a.recorders[0].state,'recording');assert.equal(a.calls.some(c=>c.url==='/api/transcribe'),false);
  a.tick(.009,80);a.tick(0,4200);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
 });
-test('manual finish mode never sends during long pauses and finishes on request',async()=>{
- const a=setup();await settle();vm.runInContext('prefs.listenPause=0;talk.onclick()',a.context);await settle();a.tick(.02);a.tick(0,12000);
- assert.equal(a.recorders[0].state,'recording');assert.equal(a.calls.some(c=>c.url==='/api/chat'),false);a.get('speech-finish').onclick();await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
+test('legacy manual preference is migrated to automatic response after two seconds',async()=>{
+ const a=setup();await settle();vm.runInContext('prefs.listenPause=0;delete prefs.autoReplyVersion;applyPrefs();talk.onclick()',a.context);await settle();assert.equal(a.get('listen-pause').value,'2');a.tick(.02);a.tick(0,2150);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
 });
 test('speech continues past 25 seconds; the two-minute limit never auto-answers a cut sentence',async()=>{
  const a=setup();await settle();vm.runInContext('talk.onclick()',a.context);await settle();a.tick(.02,26000);assert.equal(a.recorders[0].state,'recording');
@@ -83,9 +82,9 @@ test('late answer from a previous account cannot appear in the next user convers
  let resolve;const pending=new Promise(r=>resolve=r);const a=setup({chatPromise:pending});await settle();a.get('question').value='Секрет первого пользователя';const sending=vm.runInContext('send()',a.context);await settle();a.context.TalgatAccount={id:'second-user'};vm.runInContext('TalgatSwitchAccount("second-user")',a.context);resolve(Response.json({answer:'Старый секретный ответ'}));await sending;assert.equal(vm.runInContext('history.length',a.context),0);assert.equal(a.get('question').value,'');assert.equal(vm.runInContext('busy',a.context),false);
 });
 test('quiet speech is heard and a thinking pause is not cut short',async()=>{
- const a=setup();await settle();vm.runInContext('talk.onclick()',a.context);await settle();a.tick(.005);a.tick(0,2500);assert.equal(a.recorders[0].state,'recording');assert.equal(a.calls.some(c=>c.url==='/api/chat'),false);a.tick(.005);a.tick(0,4200);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
+ const a=setup();await settle();vm.runInContext('prefs.listenPause=4;talk.onclick()',a.context);await settle();a.tick(.005);a.tick(0,2500);assert.equal(a.recorders[0].state,'recording');assert.equal(a.calls.some(c=>c.url==='/api/chat'),false);a.tick(.005);a.tick(0,4200);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
 });
-test('the optional two-second pause starts a reply faster, while manual mode remains available',async()=>{
+test('two-second automatic response does not need a finish button',async()=>{
  const a=setup();await settle();vm.runInContext('prefs.listenPause=2;applyPrefs();talk.onclick()',a.context);await settle();a.tick(.02);a.tick(0,2150);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/chat'));vm.runInContext('stopVoiceSession()',a.context);
 });
 test('instant voice playback resumes listening after transcription cleanup',async()=>{
@@ -103,4 +102,9 @@ test('personal dialog UI preserves previous chat and sends only the opened conve
  a.get('newchat').onclick();assert.equal(vm.runInContext('history.length',a.context),0);assert.equal(vm.runInContext('dialogStore.list().length',a.context),2);a.get('question').value='Второй личный вопрос';await vm.runInContext('send()',a.context);const secondRequest=JSON.parse(a.calls.filter(c=>c.url==='/api/chat')[1].opts.body);assert.equal(secondRequest.history.length,0);
  a.context.selectedDialog=first;vm.runInContext('switchDialog(selectedDialog)',a.context);assert.equal(vm.runInContext('history[0].content',a.context),'Первый личный вопрос');
  a.context.TalgatAccount={id:'other-user'};vm.runInContext('TalgatSwitchAccount("other-user")',a.context);assert.equal(vm.runInContext('history.length',a.context),0);assert.equal(vm.runInContext('dialogStore.list().length',a.context),1);
+});
+
+test('manual completion UI and handlers are removed, and zero cannot disable automatic replies',async()=>{
+ const html=fs.readFileSync('web/index.html','utf8'),source=fs.readFileSync('web/app.js','utf8');assert.equal(html.includes('speech-finish'),false);assert.equal(html.includes('Я закончил'),false);assert.equal(source.includes('speech-finish'),false);
+ const a=setup();await settle();vm.runInContext('prefs.listenPause=0;applyPrefs()',a.context);assert.equal(a.get('listen-pause').value,'2');assert.equal(vm.runInContext('prefs.listenPause',a.context),2);
 });

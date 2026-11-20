@@ -75,7 +75,7 @@ function cloudVoice(){return ['heygen','neural','fish','qwen'].includes(prefs.en
 function voiceReady(){return prefs.engine==='heygen'?heygenConfigured:prefs.engine==='qwen'?qwenConfigured:prefs.engine==='fish'?fishConfigured:neuralConfigured}
 checkNeural();
 function stopOutput(){outputToken++;outputActive=false;neuralVoice?.stop();window.speechSynthesis?.cancel?.()}
-function stopCapture(){recordingToken++;recognition?.abort?.();recognition=null;voiceController?.abort();voiceController=null;$("speech-finish").hidden=true}
+function stopCapture(){recordingToken++;recognition?.abort?.();recognition=null;voiceController?.abort();voiceController=null}
 function say(source){
   if(!voice)return;
   if(recognition)stopCapture();
@@ -162,7 +162,7 @@ async function captureVoice(dictation){
  if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){stopVoiceSession();$("status").textContent="Запись микрофона не поддерживается. Откройте сайт в современном браузере.";return}
  const token=++recordingToken;let stream,audioContext,recorder,watchdog,cancelled=false,spoken=false,settled=false,reachedLimit=false;
  recognition={abort:()=>{cancelled=true;if(recorder?.state==="recording")recorder.stop();else stream?.getTracks().forEach(t=>t.stop())},stop:()=>{if(recorder?.state==="recording")recorder.stop()}};
- const cleanup=()=>{clearInterval(watchdog);if(token===recordingToken)$("speech-finish").hidden=true;stream?.getTracks().forEach(t=>t.stop());audioContext?.close().catch(()=>{});document.documentElement.style.setProperty("--audiolevel","0")};
+ const cleanup=()=>{clearInterval(watchdog);stream?.getTracks().forEach(t=>t.stop());audioContext?.close().catch(()=>{});document.documentElement.style.setProperty("--audiolevel","0")};
  try{
   $("status").textContent="Разрешите доступ к микрофону…";stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
   if(token!==recordingToken||cancelled){cleanup();return}
@@ -187,7 +187,7 @@ async function captureVoice(dictation){
     if(dictation||reachedLimit){if(reachedLimit)stopVoiceSession();$("status").textContent=reachedLimit?"Записаны 2 минуты речи. Проверьте текст и нажмите «Отправить» — ответ ещё не начат.":"Речь распознана. Можно отправить или отредактировать.";$("question").focus()}else{answered=true;await send()}
    }catch(e){if(token===recordingToken){if(e.status===422&&voiceSession){document.body.dataset.state='idle';$("status").textContent=e.message+" Слушаю ещё раз…";setTimeout(startListening,1000)}else{stopVoiceSession();$("status").textContent=e.name==='AbortError'?'Распознавание остановлено.':e.message}}}finally{clearTimeout(deadline);if(voiceController===transcriptionController)voiceController=null;if(answered&&voiceSession&&!busy&&!outputActive)startListening()}
   };
-  recorder.start(250);$("speech-finish").hidden=false;document.body.dataset.state="listening";$("status").textContent="Слушаю. Не торопитесь; закончить можно кнопкой «Я закончил».";
+  recorder.start(250);document.body.dataset.state="listening";$("status").textContent="Слушаю. После паузы отвечу автоматически.";
   watchdog=setInterval(()=>{
    if(token!==recordingToken||cancelled){if(recorder.state==='recording')recorder.stop();return}
    analyser.getFloatTimeDomainData(samples);const rms=Math.sqrt(samples.reduce((n,x)=>n+x*x,0)/samples.length),now=performance.now();
@@ -195,9 +195,9 @@ async function captureVoice(dictation){
    // Track quiet background only; do not learn the speaker's voice as noise.
    const threshold=Math.max(.0035,Math.min(.012,noiseFloor*2.4));
    if(rms>threshold){spoken=true;lastSpeech=now}else if(rms<Math.max(.0025,noiseFloor*1.5)){noiseFloor=noiseFloor*.96+rms*.04}
-   const pause=Number(prefs.listenPause??4)*1000;
+   const pause=([2,4,6,8].includes(Number(prefs.listenPause))?Number(prefs.listenPause):2)*1000;
    reachedLimit=now-started>=120000;
-   if((spoken&&pause>0&&now-lastSpeech>pause&&now-started>2000)||reachedLimit||(!spoken&&now-started>30000)){if(recorder.state==='recording')recorder.stop()}
+   if((spoken&&now-lastSpeech>pause&&now-started>2000)||reachedLimit||(!spoken&&now-started>30000)){if(recorder.state==='recording')recorder.stop()}
   },80);
  }catch(e){cleanup();if(token===recordingToken){recognition=null;stopVoiceSession();$("status").textContent=e.name==='NotAllowedError'?'Разрешите доступ к микрофону в настройках браузера.':e.name==='NotFoundError'?'Микрофон не найден.':'Не удалось включить запись микрофона.'}}
 }
@@ -208,7 +208,6 @@ talk.onclick=()=>{
  $("stage-voice").lastElementChild.textContent="Завершить разговор";closeNavigation();startListening();
 };
 $("stage-voice").onclick=()=>talk.onclick();
-$("speech-finish").onclick=()=>recognition?.stop?.();
 const mic=document.createElement('button');mic.id='mic';mic.textContent="🎙 Диктовка";mic.title="Запись и распознавание через Whisper";mic.onclick=()=>{if(recognition){recognition.stop();return}if(voiceSession)stopVoiceSession();captureVoice(true)};actions.append(mic);
 function previewPage(source){
  const dialog=document.createElement('dialog');dialog.className='settings';
@@ -272,12 +271,13 @@ for(const mode of ['chat','code'])$("mode-"+mode).onclick=()=>{workMode=mode;for
 const fitViewport=()=>document.documentElement.style.setProperty('--appheight',(window.visualViewport?.height||innerHeight)+'px');window.visualViewport?.addEventListener('resize',fitViewport);window.addEventListener('resize',fitViewport);fitViewport();
 // Local preferences never contain provider credentials.
 let prefsKey="talgat-ui-preferences-guest";
-let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4,reasoningQuality:"quick"};
+let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:2,reasoningQuality:"quick"};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
+  if(prefs.autoReplyVersion!==1){prefs.listenPause=2;prefs.autoReplyVersion=1}
   if(prefs.responseSpeedVersion!==1){prefs.reasoningQuality="quick";prefs.responseSpeedVersion=1}
   prefs.reasoningQuality=prefs.reasoningQuality==='deep'?'deep':'quick';
-  prefs.listenPause=[0,2,4,6,8].includes(Number(prefs.listenPause))?Number(prefs.listenPause):4;
+  prefs.listenPause=[2,4,6,8].includes(Number(prefs.listenPause))?Number(prefs.listenPause):2;
   prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['heygen','neural','fish','deep','qwen'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
   document.body.classList.toggle("light",prefs.theme==="light");
   document.documentElement.style.setProperty("--size",Math.max(14,Math.min(20,Number(prefs.font)||16))+"px");
@@ -331,6 +331,6 @@ window.TalgatSwitchAccount=id=>{
  storageKey="talgat-ai-2-history-"+(id||"guest");prefsKey="talgat-ui-preferences-"+(id||"guest");
  if(id){try{if(window.TalgatDialogs){dialogStore=TalgatDialogs.createStore({storage:localStorage,userId:id});history=dialogStore.messages()}else{const data=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(data))history=data.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string")}}catch{$("status").textContent="Не удалось открыть личную историю. Проверьте свободное место на устройстве."}}
  paintConversation();renderDialogList();
- prefs={theme:"dark",font:16,rate:.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4,reasoningQuality:"quick"};
+ prefs={theme:"dark",font:16,rate:.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:2,reasoningQuality:"quick"};
  if(id)try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}if(id&&heygenConfigured&&prefs.heygenVoiceVersion!==1){prefs.engine="heygen";prefs.rate=1;prefs.heygenVoiceVersion=1}applyPrefs();
 };
