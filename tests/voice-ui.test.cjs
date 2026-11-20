@@ -74,3 +74,8 @@ test('speech continues past 25 seconds; the two-minute limit never auto-answers 
  const a=setup();await settle();vm.runInContext('talk.onclick()',a.context);await settle();a.tick(.02,26000);assert.equal(a.recorders[0].state,'recording');
  a.tick(.02,95000);await settle();await settle();assert.ok(a.calls.some(c=>c.url==='/api/transcribe'));assert.equal(a.calls.some(c=>c.url==='/api/chat'),false);assert.equal(vm.runInContext('voiceSession',a.context),false);assert.match(a.get('question').value,/Сколько/);assert.match(a.get('status').textContent,/2 минуты/);
 });
+
+test('reasoning quality is normalized, persisted in controls and forwarded with the task',async()=>{
+ const a=setup();await settle();vm.runInContext('prefs.reasoningQuality="invalid";applyPrefs()',a.context);assert.equal(a.get('reasoning-quality').value,'deep');
+ a.get('question').value='Сравни варианты';await vm.runInContext('send()',a.context);assert.equal(JSON.parse(a.calls.find(c=>c.url==='/api/chat').opts.body).reasoningQuality,'deep');assert.match(a.get('status').textContent,/Ответ готов/);
+});
