@@ -1,6 +1,6 @@
 import {getUser,getSettings,handleAuthCallback,signup,login,logout,oauthLogin,acceptInvite,requestPasswordRecovery,updateUser,onAuthChange} from '@netlify/identity';
 const $=id=>document.getElementById(id), el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n};
-let account=null,callback=null;
+let account=null,callback=null,lastIdentity=undefined;
 function status(message){const n=$('account-status');if(n)n.textContent=message;else console.info(message)}
 async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin'});let data;try{data=await r.json()}catch{throw Error('Сервис временно недоступен. Повторите позже.')}if(!r.ok)throw Error(data.error||'Не удалось выполнить запрос');return data}
 function button(text,fn){const b=el('button',text);b.type='button';b.onclick=async()=>{b.disabled=true;try{await fn()}catch(e){status(e.message)}finally{b.disabled=false}};return b}
@@ -11,6 +11,7 @@ async function refresh(){
  const user=await getUser();account=null;
  if(user?.confirmedAt){try{account=await api('/api/account')}catch(e){status(e.message)}}
  const id=account?.user?.id||null;
+ if(lastIdentity!==undefined&&lastIdentity!==id){location.reload();return}lastIdentity=id;
  window.TalgatAccount={id,owner:account?.user?.owner===true};
  window.TalgatSwitchAccount?.(id);window.dispatchEvent(new CustomEvent('talgat-account-changed',{detail:window.TalgatAccount}));
  document.documentElement.classList.remove('account-loading');
