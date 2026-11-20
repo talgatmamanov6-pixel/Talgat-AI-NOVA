@@ -97,7 +97,7 @@ test('deep requests use genuine high effort and return only the final answer',as
  try{const res=await handler(request('/api/chat','POST',{message:'Выбери вариант по ограничениям'}));const data=await res.json();assert.equal(data.reasoning.effort,'high');assert.equal(JSON.stringify(data).includes('private analysis'),false)}finally{globalThis.fetch=old}
 });
 test('voice and quick modes limit effort while retaining the decision policy',async()=>{
- setKey('secret');const old=globalThis.fetch;let expected;
- globalThis.fetch=async(url,options)=>{const sent=JSON.parse(options.body);assert.equal(sent.reasoning_effort,expected);assert.equal(sent.max_completion_tokens,4096);assert.match(sent.messages[0].content,/проверь расчёты/);return Response.json({choices:[{message:{content:'Готово'}}]})};
- try{expected='medium';assert.equal((await handler(request('/api/chat','POST',{message:'Сравни два варианта',interaction:'voice'}))).status,200);expected='low';assert.equal((await handler(request('/api/chat','POST',{message:'Короткий вопрос',reasoningQuality:'quick'}))).status,200)}finally{globalThis.fetch=old}
+ setKey('secret');const old=globalThis.fetch;let expected,expectedTokens;
+ globalThis.fetch=async(url,options)=>{const sent=JSON.parse(options.body);assert.equal(sent.reasoning_effort,expected);assert.equal(sent.max_completion_tokens,expectedTokens);assert.match(sent.messages[0].content,/проверь расчёты/);return Response.json({choices:[{message:{content:'Готово'}}]})};
+ try{expected='low';expectedTokens=768;assert.equal((await handler(request('/api/chat','POST',{message:'Сравни два варианта',interaction:'voice'}))).status,200);expected='low';expectedTokens=4096;assert.equal((await handler(request('/api/chat','POST',{message:'Короткий вопрос',reasoningQuality:'quick'}))).status,200)}finally{globalThis.fetch=old}
 });

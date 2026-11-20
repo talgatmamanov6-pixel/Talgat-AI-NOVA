@@ -3,10 +3,20 @@ const $=id=>document.getElementById(id);
 let busy=false,voice=false,controller=null,recognition=null,voiceSession=false;
 let workMode="chat",attachments=[],recordingToken=0,voiceController=null;
 const speechError=code=>({"not-allowed":"Разрешите микрофон и звук в настройках браузера.","audio-capture":"Микрофон не найден.","network":"Проверьте интернет для распознавания речи.","service-not-allowed":"Голосовой сервис недоступен в этом браузере.","language-not-supported":"Русская речь не поддерживается голосовой системой устройства.","synthesis-unavailable":"На устройстве недоступен голос для озвучки."}[code]||"Голосовая функция недоступна. Попробуйте другой браузер.");
-let storageKey="talgat-ai-2-history-guest";
+let storageKey="talgat-ai-2-history-guest",dialogStore=null,conversationEpoch=0,persistenceError=false;
 let history=[];
-try{const saved=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(saved))history=saved.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string").slice(-20)}catch{}
-const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(history.slice(-20)))}catch{}};
+const save=()=>{if(!window.TalgatAccount?.id)return;try{persistenceError=false;if(dialogStore){dialogStore.save(history);renderDialogList()}else localStorage.setItem(storageKey,JSON.stringify(history))}catch{persistenceError=true;$("status").textContent="Не удалось сохранить диалог: на устройстве не хватает места. Сохраните важный текст в файл."}};
+function renderDialogList(){
+ const list=$("dialog-list"),panel=$("dialogs-panel");if(!list)return;list.replaceChildren();if(panel)panel.hidden=!dialogStore;if(!dialogStore)return;
+ for(const d of dialogStore.list()){
+  const row=document.createElement('div'),open=document.createElement('button'),remove=document.createElement('button');row.className='dialog-row';open.className='dialog-open';open.textContent=d.title;open.setAttribute('aria-pressed',String(d.id===dialogStore.current()));open.onclick=()=>switchDialog(d.id);remove.textContent='×';remove.setAttribute('aria-label','Удалить диалог '+d.title);remove.onclick=()=>{if(busy||!confirm('Удалить этот диалог с устройства?'))return;try{stopVoiceSession();conversationEpoch++;history=dialogStore.remove(d.id);paintConversation();renderDialogList()}catch(e){$("status").textContent=e.message}};row.append(open,remove);list.append(row);
+ }
+}
+function paintConversation(){ $("chat").replaceChildren();document.body.classList.remove("has-chat");for(const m of history)add(m.role,m.content)}
+function switchDialog(id){
+ if(busy){$("status").textContent="Дождитесь ответа или нажмите «Стоп», затем откройте другой диалог.";return}
+ if(!dialogStore){location.href='/account.html';return}stopVoiceSession();conversationEpoch++;fileVersion++;attachments=[];renderAttachments();$("file-input").value="";$("question").value='';try{if(id)history=dialogStore.open(id);else{dialogStore.create();history=dialogStore.messages()}paintConversation();renderDialogList();closeNavigation()}catch(e){$("status").textContent=e.message}
+}
 function safeMath(source){
   const tokens=[];
   const protectedText=source.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\s)[^$\n]+?\$)/g,m=>{
@@ -101,27 +111,30 @@ async function send(prepared){
   if(typeof prepared?.prompt!=="string")question=window.TalgatCommand?window.TalgatCommand(question):question;if(!question)return;
   if(question.length>12000){$("status").textContent="Вопрос слишком длинный. Оставьте до 12 000 символов или прикрепите текстовый файл.";return}
   stopCapture();stopOutput();
+  const requestEpoch=conversationEpoch,requestAccount=window.TalgatAccount.id;
   const previous=history.slice(-12);
   add("user",visibleQuestion);$("question").value="";
   busy=true;document.body.dataset.state="thinking";$("send").disabled=true;
-  controller=new AbortController();
+  const requestController=new AbortController();controller=requestController;
   const pending=add("assistant","Думаю…");let completed=false;
-  $("status").textContent=prefs.reasoningQuality==="quick"?"Готовлю ответ…":"Обдумываю задачу и проверяю вывод…";
-  const timeout=setTimeout(()=>controller?.abort(),prefs.reasoningQuality!=="quick"&&!voiceSession?55000:35000);
+  $("status").textContent=voiceSession||prefs.reasoningQuality==="quick"?"Готовлю ответ…":"Обдумываю задачу и проверяю вывод…";
+  const timeout=setTimeout(()=>requestController.abort(),prefs.reasoningQuality!=="quick"&&!voiceSession?55000:35000);
   try{
-    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,artifact:prepared?.artifact===true,reasoningQuality:prefs.reasoningQuality,search:Boolean($("web-search").checked),image:attachments[0]?.image,materials:attachments.filter(f=>f.text).map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
+    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,artifact:prepared?.artifact===true,reasoningQuality:prefs.reasoningQuality,search:Boolean($("web-search").checked),image:attachments[0]?.image,materials:attachments.filter(f=>f.text).map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:requestController.signal});
     const d=await readJson(r);
+    if(requestEpoch!==conversationEpoch||requestAccount!==window.TalgatAccount?.id)return;
     if(!r.ok)throw new Error(d.error||"HTTP "+r.status);
     if(typeof d.answer!=="string"||!d.answer.trim())throw new Error("Модель вернула пустой ответ");
     const answer=d.answer+(d.truncated?"\n\n> Ответ остановлен из-за лимита длины и может быть незавершён. Напишите «Продолжи», чтобы получить оставшуюся часть.":"");
     completed=true;pending.remove();add("assistant",answer);
     history.push({role:"user",content:visibleQuestion},{role:"assistant",content:answer});save();say(answer);
   }catch(e){
+    if(requestEpoch!==conversationEpoch||requestAccount!==window.TalgatAccount?.id)return;
     pending.remove();
     const detail=e.name==="AbortError"?"Превышено время ожидания или запрос остановлен.":e instanceof TypeError?"Не удалось подключиться к API. Проверьте интернет и публикацию /api/chat.":e.message;
     add("assistant","Ошибка: "+detail);if(voiceSession)stopVoiceSession();
     $("question").value=visibleQuestion;
-  }finally{clearTimeout(timeout);busy=false;if(completed&&!outputActive)$("status").textContent="Ответ готов · Talgat AI";if(!outputActive)document.body.dataset.state="idle";controller=null;$("send").disabled=false;if(voiceSession&&!outputActive)startListening()}
+  }finally{clearTimeout(timeout);if(requestEpoch===conversationEpoch&&requestAccount===window.TalgatAccount?.id){busy=false;if(completed&&!outputActive)$("status").textContent=persistenceError?"Ответ готов, но диалог не сохранён: не хватает места на устройстве.":"Ответ готов · Talgat AI";if(!outputActive)document.body.dataset.state="idle";controller=null;$("send").disabled=false;if(voiceSession&&!outputActive)startListening()}}
 }
 $("send").addEventListener("click",send);
 $("question").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});
@@ -134,7 +147,7 @@ $("stop").addEventListener("click",()=>{stopVoiceSession();controller?.abort();s
 const actions=document.querySelector(".buttons");
 const clear=document.createElement("button");clear.className="secondary";clear.textContent="Очистить историю";
 clear.onclick=()=>{if(busy)return;stopVoiceSession();history=[];save();$("chat").replaceChildren();document.body.classList.remove("has-chat");document.body.dataset.state="idle";window.speechSynthesis?.cancel?.();closeNavigation()};
-$("newchat").onclick=clear.onclick;
+$("newchat").onclick=()=>switchDialog();
 // Audio is recorded locally and transcribed by the protected server endpoint.
 const talk=document.createElement("button");talk.className="navitem";talk.textContent="◉  Голосовой режим";talk.id="voice-dialog";talk.setAttribute("aria-pressed","false");$("settings-open").before(talk);
 function stopVoiceSession(){
@@ -142,9 +155,9 @@ function stopVoiceSession(){
  talk.textContent="◉  Голосовой режим";talk.setAttribute("aria-pressed","false");
  $("stage-voice").lastElementChild.textContent="Начать разговор";document.body.dataset.state="idle";$("status").textContent="Разговор завершён";document.documentElement.style.setProperty("--audiolevel","0");
 }
-function startListening(){if(voiceSession&&!busy&&!recognition&&!outputActive)captureVoice(false)}
+function startListening(){if(voiceSession&&!busy&&!recognition&&!voiceController&&!outputActive)captureVoice(false)}
 async function captureVoice(dictation){
- if(recognition||busy)return;
+ if(recognition||busy||voiceController)return;
  stopOutput();
  if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){stopVoiceSession();$("status").textContent="Запись микрофона не поддерживается. Откройте сайт в современном браузере.";return}
  const token=++recordingToken;let stream,audioContext,recorder,watchdog,cancelled=false,spoken=false,settled=false,reachedLimit=false;
@@ -166,13 +179,13 @@ async function captureVoice(dictation){
    const blob=new Blob(chunks,{type:recorder.mimeType||'audio/webm'});if(blob.size>4000000){stopVoiceSession();$("status").textContent="Слишком длинная запись. Говорите короткими репликами.";return}
    document.body.dataset.state="transcribing";$("status").textContent="Распознаю речь…";
    const form=new FormData();const ext=blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm';form.append('file',blob,'voice.'+ext);form.append('language',prefs.language||'ru');
-   const transcriptionController=new AbortController();voiceController=transcriptionController;const deadline=setTimeout(()=>transcriptionController.abort(),30000);
+   const transcriptionController=new AbortController();voiceController=transcriptionController;let answered=false;const deadline=setTimeout(()=>transcriptionController.abort(),30000);
    try{
     const res=await fetch('/api/transcribe',{method:'POST',body:form,signal:transcriptionController.signal});const data=await readJson(res);
     if(token!==recordingToken)return;if(!res.ok){const error=new Error(data.error||'Не удалось распознать речь');error.status=res.status;throw error}
     $("question").value=data.text;document.body.dataset.state="idle";
-    if(dictation||reachedLimit){if(reachedLimit)stopVoiceSession();$("status").textContent=reachedLimit?"Записаны 2 минуты речи. Проверьте текст и нажмите «Отправить» — ответ ещё не начат.":"Речь распознана. Можно отправить или отредактировать.";$("question").focus()}else{await send()}
-   }catch(e){if(token===recordingToken){if(e.status===422&&voiceSession){document.body.dataset.state='idle';$("status").textContent=e.message+" Слушаю ещё раз…";setTimeout(startListening,1000)}else{stopVoiceSession();$("status").textContent=e.name==='AbortError'?'Распознавание остановлено.':e.message}}}finally{clearTimeout(deadline);if(voiceController===transcriptionController)voiceController=null}
+    if(dictation||reachedLimit){if(reachedLimit)stopVoiceSession();$("status").textContent=reachedLimit?"Записаны 2 минуты речи. Проверьте текст и нажмите «Отправить» — ответ ещё не начат.":"Речь распознана. Можно отправить или отредактировать.";$("question").focus()}else{answered=true;await send()}
+   }catch(e){if(token===recordingToken){if(e.status===422&&voiceSession){document.body.dataset.state='idle';$("status").textContent=e.message+" Слушаю ещё раз…";setTimeout(startListening,1000)}else{stopVoiceSession();$("status").textContent=e.name==='AbortError'?'Распознавание остановлено.':e.message}}}finally{clearTimeout(deadline);if(voiceController===transcriptionController)voiceController=null;if(answered&&voiceSession&&!busy&&!outputActive)startListening()}
   };
   recorder.start(250);$("speech-finish").hidden=false;document.body.dataset.state="listening";$("status").textContent="Слушаю. Не торопитесь; закончить можно кнопкой «Я закончил».";
   watchdog=setInterval(()=>{
@@ -180,8 +193,8 @@ async function captureVoice(dictation){
    analyser.getFloatTimeDomainData(samples);const rms=Math.sqrt(samples.reduce((n,x)=>n+x*x,0)/samples.length),now=performance.now();
    document.documentElement.style.setProperty('--audiolevel',String(Math.min(1,rms*12)));
    // Track quiet background only; do not learn the speaker's voice as noise.
-   const threshold=Math.max(.006,Math.min(.02,noiseFloor*2.5));
-   if(rms>threshold){spoken=true;lastSpeech=now}else{noiseFloor=noiseFloor*.96+Math.min(rms,.008)*.04}
+   const threshold=Math.max(.0035,Math.min(.012,noiseFloor*2.4));
+   if(rms>threshold){spoken=true;lastSpeech=now}else if(rms<Math.max(.0025,noiseFloor*1.5)){noiseFloor=noiseFloor*.96+rms*.04}
    const pause=Number(prefs.listenPause??4)*1000;
    reachedLimit=now-started>=120000;
    if((spoken&&pause>0&&now-lastSpeech>pause&&now-started>2000)||reachedLimit||(!spoken&&now-started>30000)){if(recorder.state==='recording')recorder.stop()}
@@ -259,11 +272,12 @@ for(const mode of ['chat','code'])$("mode-"+mode).onclick=()=>{workMode=mode;for
 const fitViewport=()=>document.documentElement.style.setProperty('--appheight',(window.visualViewport?.height||innerHeight)+'px');window.visualViewport?.addEventListener('resize',fitViewport);window.addEventListener('resize',fitViewport);fitViewport();
 // Local preferences never contain provider credentials.
 let prefsKey="talgat-ui-preferences-guest";
-let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4,reasoningQuality:"deep"};
+let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4,reasoningQuality:"quick"};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
-  prefs.reasoningQuality=prefs.reasoningQuality==='quick'?'quick':'deep';
-  prefs.listenPause=[0,4,6,8].includes(Number(prefs.listenPause))?Number(prefs.listenPause):4;
+  if(prefs.responseSpeedVersion!==1){prefs.reasoningQuality="quick";prefs.responseSpeedVersion=1}
+  prefs.reasoningQuality=prefs.reasoningQuality==='deep'?'deep':'quick';
+  prefs.listenPause=[0,2,4,6,8].includes(Number(prefs.listenPause))?Number(prefs.listenPause):4;
   prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['heygen','neural','fish','deep','qwen'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
   document.body.classList.toggle("light",prefs.theme==="light");
   document.documentElement.style.setProperty("--size",Math.max(14,Math.min(20,Number(prefs.font)||16))+"px");
@@ -312,11 +326,11 @@ requestAnimationFrame(animateOrb);
 
 let activeAccount=null;
 window.TalgatSwitchAccount=id=>{
- if(id===activeAccount)return;activeAccount=id;
- controller?.abort();stopVoiceSession();attachments=[];$("question").value="";
- storageKey="talgat-ai-2-history-"+(id||"guest");prefsKey="talgat-ui-preferences-"+(id||"guest");history=[];
- try{const data=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(data))history=data.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string").slice(-20)}catch{}
- $("chat").replaceChildren();document.body.classList.remove("has-chat");for(const m of history)add(m.role,m.content);
- prefs={theme:"dark",font:16,rate:.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4,reasoningQuality:"deep"};
- try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}applyPrefs();
+ if(id===activeAccount)return;activeAccount=id;conversationEpoch++;
+ controller?.abort();controller=null;busy=false;$("send").disabled=false;stopVoiceSession();fileVersion++;attachments=[];renderAttachments();$("file-input").value="";$("question").value="";dialogStore=null;history=[];
+ storageKey="talgat-ai-2-history-"+(id||"guest");prefsKey="talgat-ui-preferences-"+(id||"guest");
+ if(id){try{if(window.TalgatDialogs){dialogStore=TalgatDialogs.createStore({storage:localStorage,userId:id});history=dialogStore.messages()}else{const data=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(data))history=data.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string")}}catch{$("status").textContent="Не удалось открыть личную историю. Проверьте свободное место на устройстве."}}
+ paintConversation();renderDialogList();
+ prefs={theme:"dark",font:16,rate:.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4,reasoningQuality:"quick"};
+ if(id)try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}if(id&&heygenConfigured&&prefs.heygenVoiceVersion!==1){prefs.engine="heygen";prefs.rate=1;prefs.heygenVoiceVersion=1}applyPrefs();
 };

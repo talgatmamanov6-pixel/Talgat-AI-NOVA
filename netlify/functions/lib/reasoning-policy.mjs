@@ -1,9 +1,9 @@
 // Groq supports these effort levels for GPT-OSS and Qwen 3.8.
 export function reasoningOptions(model,{quality='deep',voice=false,search=false,artifact=false}={}){
  const supported=['openai/gpt-oss-120b','openai/gpt-oss-20b','qwen/qwen3.8-27b'].includes(model);
- const effort=quality==='quick'?'low':voice||artifact?'medium':'high';
+ const effort=voice||quality==='quick'?'low':artifact?'medium':'high';
  return {
-  max_completion_tokens:4096,
+  max_completion_tokens:voice&&!artifact?768:4096,
   ...(supported?{reasoning_effort:effort,reasoning_format:'hidden'}:{})
  };
 }
