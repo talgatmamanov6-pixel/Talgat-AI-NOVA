@@ -1,5 +1,6 @@
+import {metered,AccessError} from './lib/commerce.mjs';
 const json=(value,status=200)=>Response.json(value,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
-export default async function transcribe(request){
+async function transcribe(request){
  if(request.method!=='POST')return json({error:'Используйте POST с аудиозаписью.'},405);
  let key;try{key=Netlify.env.get('GROQ_API_KEY')}catch{}
  if(!key)return json({error:'Распознавание речи не настроено на сервере.'},503);
@@ -27,3 +28,5 @@ export default async function transcribe(request){
  }catch(e){return json({error:e.name==='AbortError'?'Распознавание заняло слишком много времени.':'Сервис распознавания временно недоступен.'},e.name==='AbortError'?504:502)}finally{clearTimeout(timer)}
 }
 export const config={path:'/api/transcribe'};
+
+export default metered(transcribe,{metric:'recording',measure:async()=>1});

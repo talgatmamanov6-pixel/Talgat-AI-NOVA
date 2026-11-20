@@ -2,12 +2,30 @@
 'use strict';
 const get=id=>document.getElementById(id),catalog=window.TalgatSkills;
 let selected=catalog.items[0],category='Все';
-const key='talgat-saved-results-v1';let saved=[];
+let key='talgat-saved-results-v1-guest';let saved=[];
 try{const data=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(data))saved=data.filter(x=>x&&typeof x.id==='string'&&typeof x.source==='string'&&x.source.length<=100000&&typeof x.title==='string').slice(0,24)}catch{}
+window.addEventListener('talgat-account-changed',event=>{key='talgat-saved-results-v1-'+(event.detail.id||'guest');saved=[];try{const data=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(data))saved=data.filter(x=>x&&typeof x.id==='string'&&typeof x.source==='string'&&x.source.length<=100000&&typeof x.title==='string').slice(0,24)}catch{}get('saved-list').replaceChildren();get('saved-preview').replaceChildren();});
 const persist=()=>{try{localStorage.setItem(key,JSON.stringify(saved));return true}catch{get('status').textContent='Не хватает места в браузере. Скачайте результат.';return false}};
 function download(filename,content){
  const form=document.createElement('form');form.method='POST';form.action='/api/export';form.hidden=true;
  for(const [name,value] of Object.entries({filename,content})){const field=document.createElement('input');field.type='hidden';field.name=name;field.value=value;form.append(field)}document.body.append(form);form.submit();setTimeout(()=>form.remove(),2000);
+}
+function fileButton(label,filename,generate){
+ const button=document.createElement('button');
+ button.textContent=label;
+ button.onclick=async()=>{
+  button.disabled=true;
+  try{
+   const tools=await import('/generated/files.mjs');
+   const blob=await generate(tools);
+   const url=URL.createObjectURL(blob);
+   const link=document.createElement('a');
+   link.href=url;link.download=filename;link.click();
+   setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }catch(error){get('status').textContent=error.message||'Не удалось создать файл.'}
+  finally{button.disabled=false}
+ };
+ return button;
 }
 const csv=catalog.csv;
 function title(source){return source.replace(/[#*`]/g,'').split('\n').find(s=>s.trim())?.slice(0,70)||'Результат Talgat'}
@@ -29,8 +47,9 @@ function decorate(el,source){
   const before=saved;saved=[{id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),title:title(source),source,date:new Date().toISOString()},...saved].slice(0,24);
   if(persist())save.textContent='Сохранено';else saved=before;
  };
- bar.append(save,md,pdf);
- for(const [i,table] of [...el.querySelectorAll('table')].entries()){const button=document.createElement('button');button.className='table-export';button.textContent='Таблица '+(i+1)+' · CSV ↓';button.onclick=()=>download('talgat-table-'+(i+1)+'.csv','\ufeff'+csv(table));table.after(button)}
+ if(/```[^\n]*\n/.test(source))bar.append(fileButton("Проект ZIP ↓","talgat-project.zip",tools=>tools.project(tools.extractProject(source))));
+ bar.append(save,md,pdf,fileButton("Word ↓","talgat-result.docx",tools=>tools.word(source)));
+ for(const [i,table] of [...el.querySelectorAll('table')].entries()){const button=document.createElement('button');button.className='table-export';button.textContent='Таблица '+(i+1)+' · CSV ↓';button.onclick=()=>download('talgat-table-'+(i+1)+'.csv','\ufeff'+csv(table));table.after(button,fileButton("Excel ↓","talgat-table-"+(i+1)+".xlsx",tools=>tools.spreadsheet(table)))}
 }
 window.TalgatWorkspace={decorate,csv};
 function choose(skill){selected=skill;get('skill-name').textContent=skill.title;get('skill-command').textContent='/'+skill.id;get('skill-description').textContent=skill.description;get('skill-id').value=skill.id;get('skill-feedback').textContent='';drawList()}
