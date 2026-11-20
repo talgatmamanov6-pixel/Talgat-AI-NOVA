@@ -102,22 +102,23 @@ async function send(prepared){
   add("user",visibleQuestion);$("question").value="";
   busy=true;document.body.dataset.state="thinking";$("send").disabled=true;
   controller=new AbortController();
-  const pending=add("assistant","Думаю…");
-  const timeout=setTimeout(()=>controller?.abort(),35000);
+  const pending=add("assistant","Думаю…");let completed=false;
+  $("status").textContent=prefs.reasoningQuality==="quick"?"Готовлю ответ…":"Обдумываю задачу и проверяю вывод…";
+  const timeout=setTimeout(()=>controller?.abort(),prefs.reasoningQuality!=="quick"&&!voiceSession?55000:35000);
   try{
-    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,search:Boolean($("web-search").checked),image:attachments[0]?.image,materials:attachments.filter(f=>f.text).map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
+    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:question,history:previous,preferences:prefs.memory||"",language:prefs.language||"ru",interaction:voiceSession?"voice":"text",mode:workMode,reasoningQuality:prefs.reasoningQuality,search:Boolean($("web-search").checked),image:attachments[0]?.image,materials:attachments.filter(f=>f.text).map(f=>"Файл: "+f.name+"\n"+f.text).join("\n\n")}),signal:controller.signal});
     const d=await readJson(r);
     if(!r.ok)throw new Error(d.error||"HTTP "+r.status);
     if(typeof d.answer!=="string"||!d.answer.trim())throw new Error("Модель вернула пустой ответ");
     const answer=d.answer+(d.truncated?"\n\n> Ответ остановлен из-за лимита длины и может быть незавершён. Напишите «Продолжи», чтобы получить оставшуюся часть.":"");
-    pending.remove();add("assistant",answer);
+    completed=true;pending.remove();add("assistant",answer);
     history.push({role:"user",content:visibleQuestion},{role:"assistant",content:answer});save();say(answer);
   }catch(e){
     pending.remove();
     const detail=e.name==="AbortError"?"Превышено время ожидания или запрос остановлен.":e instanceof TypeError?"Не удалось подключиться к API. Проверьте интернет и публикацию /api/chat.":e.message;
     add("assistant","Ошибка: "+detail);if(voiceSession)stopVoiceSession();
     $("question").value=visibleQuestion;
-  }finally{clearTimeout(timeout);busy=false;if(!outputActive)document.body.dataset.state="idle";controller=null;$("send").disabled=false;if(voiceSession&&!outputActive)startListening()}
+  }finally{clearTimeout(timeout);busy=false;if(completed&&!outputActive)$("status").textContent="Ответ готов · Talgat AI";if(!outputActive)document.body.dataset.state="idle";controller=null;$("send").disabled=false;if(voiceSession&&!outputActive)startListening()}
 }
 $("send").addEventListener("click",send);
 $("question").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});
@@ -255,21 +256,22 @@ for(const mode of ['chat','code'])$("mode-"+mode).onclick=()=>{workMode=mode;for
 const fitViewport=()=>document.documentElement.style.setProperty('--appheight',(window.visualViewport?.height||innerHeight)+'px');window.visualViewport?.addEventListener('resize',fitViewport);window.addEventListener('resize',fitViewport);fitViewport();
 // Local preferences never contain provider credentials.
 const prefsKey="talgat-ui-preferences";
-let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4};
+let prefs={theme:"dark",font:16,rate:0.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:4,reasoningQuality:"deep"};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}
 function applyPrefs(){
+  prefs.reasoningQuality=prefs.reasoningQuality==='quick'?'quick':'deep';
   prefs.listenPause=[0,4,6,8].includes(Number(prefs.listenPause))?Number(prefs.listenPause):4;
   prefs.theme=prefs.theme==='light'?'light':'dark';prefs.engine=['heygen','neural','fish','deep','qwen'].includes(prefs.engine)?prefs.engine:'device';prefs.language=['ru','kk','en'].includes(prefs.language)?prefs.language:'ru';prefs.font=Math.max(14,Math.min(20,Number(prefs.font)||16));prefs.rate=Math.max(.7,Math.min(1.3,Number(prefs.rate)||.95));prefs.motion=prefs.motion==='off'?'off':'on';prefs.memory=typeof prefs.memory==='string'?prefs.memory.slice(0,2000):'';
   document.body.classList.toggle("light",prefs.theme==="light");
   document.documentElement.style.setProperty("--size",Math.max(14,Math.min(20,Number(prefs.font)||16))+"px");
-  $("speech-engine").value=prefs.engine;$("listen-pause").value=String(prefs.listenPause);
+  $("reasoning-quality").value=prefs.reasoningQuality;$("speech-engine").value=prefs.engine;$("listen-pause").value=String(prefs.listenPause);
   $("speech-language").value=["ru","kk","en"].includes(prefs.language)?prefs.language:"ru";
   $("theme").value=prefs.theme==="light"?"light":"dark";
   $("memory").value=typeof prefs.memory==="string"?prefs.memory:"";$("font-size").value=prefs.font;$("voice-rate").value=prefs.rate;$("motion").value=prefs.motion;
   try{localStorage.setItem(prefsKey,JSON.stringify(prefs))}catch{}
 }
 applyPrefs();
-for(const [id,key] of [["listen-pause","listenPause"],["speech-engine","engine"],["speech-language","language"],["theme","theme"],["font-size","font"],["voice-rate","rate"],["motion","motion"],["memory","memory"]])$(id).addEventListener("input",()=>{prefs[key]=$(id).value;applyPrefs()});
+for(const [id,key] of [["reasoning-quality","reasoningQuality"],["listen-pause","listenPause"],["speech-engine","engine"],["speech-language","language"],["theme","theme"],["font-size","font"],["voice-rate","rate"],["motion","motion"],["memory","memory"]])$(id).addEventListener("input",()=>{prefs[key]=$(id).value;applyPrefs()});
 $("settings-open").onclick=()=>{$("settings").showModal();closeNavigation()};
 $("settings-close").onclick=()=>$("settings").close();
 $("settings").addEventListener("click",e=>{if(e.target===$("settings")){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close()}});
