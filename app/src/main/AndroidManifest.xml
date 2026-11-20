@@ -1,1 +1,16 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.RECORD_AUDIO"/><application android:label="TALGAT AI NOVA" android:icon="@drawable/nova_icon" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ <uses-permission android:name="android.permission.INTERNET"/>
+ <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+ <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+ <application android:label="Talgat AI" android:icon="@drawable/nova_icon"
+  android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false"
+  android:allowBackup="false" android:supportsRtl="true">
+  <activity android:name=".MainActivity" android:exported="true"
+   android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|keyboardHidden">
+   <intent-filter>
+    <action android:name="android.intent.action.MAIN"/>
+    <category android:name="android.intent.category.LAUNCHER"/>
+   </intent-filter>
+  </activity>
+ </application>
+</manifest>
