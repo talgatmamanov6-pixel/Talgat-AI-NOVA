@@ -1,6 +1,6 @@
 import {enabled,json,identity,service,fail,checkOrigin,validPaymentURL,AccessError,transaction} from './lib/commerce.mjs';
 import {randomUUID} from 'node:crypto';
-const offers=[{id:'basic',name:'Talgat AI — 30 дней',amount:4990,description:'100 единиц текста, 3 изображения, 20 записей речи, 5000 символов озвучки. Поиск и разбор фото: 3 единицы за запрос; обычный текст: 1.'},{id:'service',name:'Упаковка одного объекта',amount:9900,description:'Услуга: тексты объявления, пост и сценарий ролика. Исполняется вручную после согласования исходных материалов и срока; подписка не включена.'}];
+const offers=[{id:'basic',name:'Talgat AI — 30 дней',amount:4990,description:'100 единиц текста, 3 изображения, 20 записей речи, 5000 символов озвучки. Поиск и разбор фото: 3 единицы за запрос; обычный текст: 1.'},{id:'service',name:'Помощь с одной задачей',amount:9900,description:'Персональная помощь: текст, документ или сценарий по вашему заданию. Объём, результат и срок согласуются до оплаты. Исполняется вручную; подписка не включена.'}];
 const requireOwner=u=>{if(!u.owner)throw new AccessError('Только для владельца',403)};
 export default async function handler(request){
  if(!enabled())return json({error:'Платный доступ ещё не запущен'},503);
