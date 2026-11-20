@@ -95,6 +95,7 @@ async function send(prepared){
   let question=typeof prepared?.prompt==="string"?prepared.prompt:$("question").value.trim();
   const visibleQuestion=typeof prepared?.display==="string"?prepared.display:question;
   if(!question||busy)return;
+  if(typeof prepared?.prompt!=="string"&&window.TalgatCreative?.route(question)){$("question").value="";return}
   if(typeof prepared?.prompt!=="string")question=window.TalgatCommand?window.TalgatCommand(question):question;if(!question)return;
   if(question.length>12000){$("status").textContent="Вопрос слишком длинный. Оставьте до 12 000 символов или прикрепите текстовый файл.";return}
   stopCapture();stopOutput();
@@ -208,10 +209,10 @@ function previewPage(source){
 }
 function addCodeDownloads(el){
  for(const [index,code] of [...el.querySelectorAll('pre code')].entries()){
-  const ext=({javascript:'js',typescript:'ts',python:'py',html:'html',css:'css',json:'json',bash:'sh',shell:'sh',sql:'sql',java:'java',cpp:'cpp',csharp:'cs',yaml:'yml'})[(code.className.match(/language-([a-z]+)/)||[])[1]]||'txt';
+  const ext=({javascript:'js',typescript:'ts',python:'py',html:'html',css:'css',json:'json',bash:'sh',shell:'sh',sql:'sql',java:'java',cpp:'cpp',csharp:'cs',yaml:'yml',svg:'svg',kotlin:'kt',dart:'dart',swift:'swift',jsx:'jsx',tsx:'tsx'})[(code.className.match(/language-([a-z]+)/)||[])[1]]||'txt';
   const bar=document.createElement('div');bar.className='codeactions';const label=document.createElement('span');label.textContent='talgat-code-'+(index+1)+'.'+ext;
   const download=document.createElement('button');download.textContent='Скачать файл ↓';download.onclick=()=>{const form=document.createElement('form');form.method='POST';form.action='/api/export';form.style.display='none';for(const [name,value] of [['filename',label.textContent],['content',code.textContent]]){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.append(input)}document.body.append(form);form.submit();setTimeout(()=>form.remove(),2000)};bar.append(label,download);
-  if(ext==='html'){
+  if(ext==='html'||ext==='svg'){
    const preview=document.createElement('button');preview.textContent='Запустить предпросмотр';
    preview.onclick=()=>previewPage(code.textContent);bar.append(preview);
   }

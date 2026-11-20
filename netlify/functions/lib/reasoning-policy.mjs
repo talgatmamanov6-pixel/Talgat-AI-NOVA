@@ -3,7 +3,7 @@ export function reasoningOptions(model,{quality='deep',voice=false,search=false}
  const supported=['openai/gpt-oss-120b','openai/gpt-oss-20b','qwen/qwen3.8-27b'].includes(model);
  const effort=quality==='quick'?'low':voice?'medium':'high';
  return {
-  max_completion_tokens:search?4096:quality==='quick'||voice?4096:8192,
+  max_completion_tokens:search?4096:quality==='quick'||voice||!supported?4096:16384,
   ...(supported?{reasoning_effort:effort,reasoning_format:'hidden'}:{})
  };
 }

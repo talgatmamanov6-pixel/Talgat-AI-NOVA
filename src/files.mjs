@@ -101,3 +101,5 @@ export async function spreadsheet(table) {
   const bytes=await workbook.xlsx.writeBuffer();
   return new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
+
+export {extractProject,project} from './project.mjs';

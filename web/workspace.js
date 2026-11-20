@@ -46,6 +46,7 @@ function decorate(el,source){
   const before=saved;saved=[{id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),title:title(source),source,date:new Date().toISOString()},...saved].slice(0,24);
   if(persist())save.textContent='Сохранено';else saved=before;
  };
+ if(/```[^\n]*\n/.test(source))bar.append(fileButton("Проект ZIP ↓","talgat-project.zip",tools=>tools.project(tools.extractProject(source))));
  bar.append(save,md,pdf,fileButton("Word ↓","talgat-result.docx",tools=>tools.word(source)));
  for(const [i,table] of [...el.querySelectorAll('table')].entries()){const button=document.createElement('button');button.className='table-export';button.textContent='Таблица '+(i+1)+' · CSV ↓';button.onclick=()=>download('talgat-table-'+(i+1)+'.csv','\ufeff'+csv(table));table.after(button,fileButton("Excel ↓","talgat-table-"+(i+1)+".xlsx",tools=>tools.spreadsheet(table)))}
 }
