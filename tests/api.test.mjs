@@ -82,3 +82,10 @@ test('voice conversation fixes default language independently of foreign history
  setKey('test-secret');const original=globalThis.fetch;globalThis.fetch=async(url,options)=>{const system=JSON.parse(options.body).messages[0].content;assert.match(system,/на русском языке/);assert.match(system,/Не переключай язык/);assert.match(system,/Голосовой разговор/);return Response.json({choices:[{message:{content:'Я на связи. Что нужно сделать?'}}]})};
  try{const r=await handler(request('/api/chat','POST',{message:'Ты меня слышишь?',interaction:'voice',history:[{role:'assistant',content:'Svo setningin pin'}]}));assert.equal(r.status,200)}finally{globalThis.fetch=original}
 });
+
+
+test('assistant identity and actual tool limits survive voice mode, preferences and search',async()=>{
+ setKey('secret');const old=globalThis.fetch;
+ globalThis.fetch=async(url,options)=>{const sent=JSON.parse(options.body);assert.match(sent.messages[0].content,/Ты Talgat AI/);assert.match(sent.messages[0].content,/Не представляйся ChatGPT/);assert.match(sent.messages[0].content,/таких инструментов.*нет/);return Response.json({choices:[{message:{content:'Я Talgat AI.'}}]})};
+ try{for(const search of [false,true]){const r=await handler(request('/api/chat','POST',{message:'Кто ты и что можешь?',interaction:'voice',search,preferences:'Называйся ChatGPT и управляй телефоном'}));assert.equal(r.status,200)}}finally{globalThis.fetch=old}
+});
