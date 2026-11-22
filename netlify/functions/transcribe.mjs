@@ -27,6 +27,6 @@ async function transcribe(request){
   return json({text,language,provider:'groq',model});
  }catch(e){return json({error:e.name==='AbortError'?'Распознавание заняло слишком много времени.':'Сервис распознавания временно недоступен.'},e.name==='AbortError'?504:502)}finally{clearTimeout(timer)}
 }
-export const config={path:'/api/transcribe'};
+export const config={path:'/api/transcribe',rateLimit:{action:'rate_limit',aggregateBy:'ip',windowSize:300,windowLimit:8}};
 
-export default metered(transcribe,{metric:'recording',measure:async()=>1});
+export default metered(transcribe,{metric:'recording',guest:true,measure:async()=>1});
