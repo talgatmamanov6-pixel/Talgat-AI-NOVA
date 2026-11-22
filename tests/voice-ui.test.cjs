@@ -139,3 +139,8 @@ test('refresh failure does not loop or retry provider errors',async()=>{
 test('a protected request is never replayed in a different account after refresh',async()=>{
  const a=setup();await settle();let attempts=0;a.context.fetch=async()=>{attempts++;return Response.json({error:'expired'},{status:401})};a.context.TalgatRefreshSession=async()=>{a.context.TalgatAccount={id:'different-user'};return true};assert.equal((await vm.runInContext('protectedFetch("/api/chat",{})',a.context)).status,401);assert.equal(attempts,1);
 });
+
+test('guest chat is available without login and persists a separate local history',async()=>{
+ const a=setup();await settle();a.context.TalgatAccount={id:null,owner:false};vm.runInContext('TalgatSwitchAccount(null)',a.context);a.get('question').value='Вопрос без регистрации';await vm.runInContext('send()',a.context);await settle();
+ const request=a.calls.find(c=>c.url==='/api/chat');assert.ok(request);assert.equal(JSON.parse(request.opts.body).message,'Вопрос без регистрации');assert.equal(vm.runInContext('history.length',a.context),2);assert.ok(vm.runInContext('storageKey',a.context).endsWith('guest'));
+});
