@@ -375,5 +375,9 @@ window.TalgatSwitchAccount=id=>{
  if(id){try{if(window.TalgatDialogs){dialogStore=TalgatDialogs.createStore({storage:localStorage,userId:id});history=dialogStore.messages()}else{const data=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(data))history=data.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string")}}catch{$("status").textContent="Не удалось открыть личную историю. Проверьте свободное место на устройстве."}}else{try{const data=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(data))history=data.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string").slice(-20)}catch{}}
  paintConversation();renderDialogList();
  prefs={theme:"dark",font:16,rate:.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:2,reasoningQuality:"quick"};
+
+// Initialize the public guest workspace immediately; account module may replace it with a signed-in profile later.
+window.TalgatSwitchAccount(null);
+document.documentElement.classList.remove('account-loading');
  try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}if(id&&heygenConfigured&&prefs.heygenVoiceVersion!==1){prefs.engine="heygen";prefs.rate=1;prefs.heygenVoiceVersion=1}applyPrefs();
 };
