@@ -15,7 +15,7 @@ async function refresh(){
  window.TalgatAccount={id,owner:account?.user?.owner===true};
  window.TalgatSwitchAccount?.(id);window.dispatchEvent(new CustomEvent('talgat-account-changed',{detail:window.TalgatAccount}));
  document.documentElement.classList.remove('account-loading');
- const badge=$('account-badge');if(badge)badge.textContent=account?'Аккаунт и лимиты':'Войти / тарифы';
+ const badge=$('account-badge');if(badge)badge.textContent=account?'Аккаунт и лимиты':'Гостевой режим';
  if(!$('account-content'))return;
  const out=$('account-content');out.replaceChildren();
  $('auth-panel').hidden=Boolean(account);
