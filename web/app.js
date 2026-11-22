@@ -92,8 +92,6 @@ function say(source){
   try{speechSynthesis.speak(u)}catch{outputActive=false;stopVoiceSession();$("status").textContent="Не удалось запустить голос устройства."}
 }
 async function send(prepared){
-  if(!window.TalgatAccount?.id){location.href="/account.html";return}
-
   let question=typeof prepared?.prompt==="string"?prepared.prompt:$("question").value.trim();
   const visibleQuestion=typeof prepared?.display==="string"?prepared.display:question;
   if(!question||busy)return;
