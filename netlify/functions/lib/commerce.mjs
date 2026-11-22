@@ -22,10 +22,10 @@ export function commerceService(pool){
 export async function identity(){const u=await getUser();if(!u?.id||!u.email)throw new AccessError('Войдите в аккаунт: /account.html',401);if(!u.confirmedAt)throw new AccessError('Подтвердите email по ссылке из письма.',403);return {...u,owner:u.email.toLowerCase()===String(env('TALGAT_OWNER_EMAIL')||'').toLowerCase()}}
 export const service=()=>commerceService(getDatabase().pool);
 export const fail=e=>json({error:e instanceof AccessError?e.message:'Сервис доступа временно недоступен. Повторите позже.'},e instanceof AccessError?e.status:503);
-export function metered(handler,{metric,measure=async()=>1,stream=false},dependencies={}){return async request=>{
+export function metered(handler,{metric,measure=async()=>1,stream=false,guest=false},dependencies={}){return async request=>{
  if(!(dependencies.enabled||enabled)()||request.method!=='POST')return handler(request);
  let svc,id;
- try{checkOrigin(request);const user=await (dependencies.identity||identity)();svc=(dependencies.service||service)();await svc.account(user);id=await svc.reserve(user,metric,await measure(request.clone()));const response=await handler(request);if(!stream||!response.ok||!response.body){await svc.finish(id,response.ok);return response}
+ try{checkOrigin(request);let user;try{user=await (dependencies.identity||identity)()}catch(e){if(guest&&e instanceof AccessError&&(e.status===401||e.status===403))return handler(request);throw e}svc=(dependencies.service||service)();await svc.account(user);id=await svc.reserve(user,metric,await measure(request.clone()));const response=await handler(request);if(!stream||!response.ok||!response.body){await svc.finish(id,response.ok);return response}
  const reader=response.body.getReader(),decoder=new TextDecoder();let remainder='',success=false,finished=false;
  const finish=async()=>{if(!finished){finished=true;await svc.finish(id,success)}};
  const body=new ReadableStream({async pull(controller){try{const {done,value}=await reader.read();if(done){remainder+=decoder.decode();if(remainder.trim())inspect(remainder);await finish();controller.close();return}remainder+=decoder.decode(value,{stream:true});const lines=remainder.split('\n');remainder=lines.pop();for(const line of lines)inspect(line);controller.enqueue(value)}catch(e){await finish();controller.error(e)}},async cancel(){await reader.cancel();await finish()}});
