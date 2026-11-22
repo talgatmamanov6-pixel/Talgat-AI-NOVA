@@ -11,4 +11,4 @@ const handler=imageHandler({
 });
 export const config={path:'/api/images',rateLimit:{windowLimit:4,windowSize:180,aggregateBy:['ip','domain']}};
 
-export default metered(handler,{metric:'image',stream:true});
+export default metered(handler,{metric:'image',stream:true,guest:true});
