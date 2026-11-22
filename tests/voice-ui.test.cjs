@@ -79,3 +79,8 @@ test('reasoning quality is normalized, persisted in controls and forwarded with 
  const a=setup();await settle();vm.runInContext('prefs.reasoningQuality="invalid";applyPrefs()',a.context);assert.equal(a.get('reasoning-quality').value,'deep');
  a.get('question').value='Сравни варианты';await vm.runInContext('send()',a.context);assert.equal(JSON.parse(a.calls.find(c=>c.url==='/api/chat').opts.body).reasoningQuality,'deep');assert.match(a.get('status').textContent,/Ответ готов/);
 });
+
+test('guest can send a chat message without being redirected to account login',async()=>{
+ const a=setup();await settle();a.context.TalgatAccount={id:null,owner:false};a.get('question').value='Проверка гостевого режима';await vm.runInContext('send()',a.context);await settle();
+ const request=a.calls.find(c=>c.url==='/api/chat');assert.ok(request);assert.equal(JSON.parse(request.opts.body).message,'Проверка гостевого режима');assert.equal(a.get('question').value,'');assert.equal(vm.runInContext('history.length',a.context),2);
+});
