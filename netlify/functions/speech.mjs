@@ -67,4 +67,4 @@ async function speech(req){
 }
 export const config={path:'/api/speech',rateLimit:{action:'rate_limit',aggregateBy:'ip',windowSize:60,windowLimit:30}};
 
-export default metered(speech,{metric:'speech',measure:async r=>{const b=await r.json();const n=Array.from(String(b.text||'')).length;if(n<1||n>1200)throw new AccessError('Текст озвучки: 1–1200 символов',400);return n}});
+export default metered(speech,{metric:'speech',guest:true,measure:async r=>{const b=await r.json();const n=Array.from(String(b.text||'')).length;if(n<1||n>1200)throw new AccessError('Текст озвучки: 1–1200 символов',400);return n}});
