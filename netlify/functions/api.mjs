@@ -93,6 +93,6 @@ async function handler(request){
     return json({error:e?.name==="AbortError"?"Истекло время ожидания ответа AI":"Не удалось подключиться к AI-провайдеру"},e?.name==="AbortError"?504:502);
   }finally{clearTimeout(timer)}
 }
-export const config={path:["/api/status","/api/chat"]};
+export const config={path:["/api/status","/api/chat"],rateLimit:{action:'rate_limit',aggregateBy:'ip',windowSize:60,windowLimit:12}};
 
-export default metered(handler,{metric:'text',measure:async r=>{const b=await r.json();return b.search||b.image?3:1}});
+export default metered(handler,{metric:'text',guest:true,measure:async r=>{const b=await r.json();return b.search||b.image?3:1}});
