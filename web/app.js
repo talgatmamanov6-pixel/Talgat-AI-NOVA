@@ -1,11 +1,12 @@
 "use strict";
 const $=id=>document.getElementById(id);
+window.TalgatAccount=window.TalgatAccount||{id:null,owner:false};
 let busy=false,voice=false,controller=null,recognition=null,voiceSession=false;
 let workMode="chat",attachments=[],recordingToken=0,voiceController=null;
 const speechError=code=>({"not-allowed":"Разрешите микрофон и звук в настройках браузера.","audio-capture":"Микрофон не найден.","network":"Проверьте интернет для распознавания речи.","service-not-allowed":"Голосовой сервис недоступен в этом браузере.","language-not-supported":"Русская речь не поддерживается голосовой системой устройства.","synthesis-unavailable":"На устройстве недоступен голос для озвучки."}[code]||"Голосовая функция недоступна. Попробуйте другой браузер.");
 let storageKey="talgat-ai-2-history-guest",dialogStore=null,conversationEpoch=0,persistenceError=false;
 let history=[];
-const save=()=>{if(!window.TalgatAccount?.id)return;try{persistenceError=false;if(dialogStore){dialogStore.save(history);renderDialogList()}else localStorage.setItem(storageKey,JSON.stringify(history))}catch{persistenceError=true;$("status").textContent="Не удалось сохранить диалог: на устройстве не хватает места. Сохраните важный текст в файл."}};
+const save=()=>{try{persistenceError=false;if(dialogStore){dialogStore.save(history);renderDialogList()}else localStorage.setItem(storageKey,JSON.stringify(history))}catch{persistenceError=true;$("status").textContent="Не удалось сохранить диалог: на устройстве не хватает места. Сохраните важный текст в файл."}};
 function renderDialogList(){
  const list=$("dialog-list"),panel=$("dialogs-panel");if(!list)return;list.replaceChildren();if(panel)panel.hidden=!dialogStore;if(!dialogStore)return;
  for(const d of dialogStore.list()){
@@ -139,8 +140,6 @@ function say(source){
   try{speechSynthesis.speak(u)}catch{clearTimeout(deviceSpeechTimer);speechFailed(Error("Не удалось запустить голос устройства."))}
 }
 async function send(prepared){
-  if(!window.TalgatAccount?.id){location.href="/account.html";return}
-
   let question=typeof prepared?.prompt==="string"?prepared.prompt:$("question").value.trim();
   const visibleQuestion=typeof prepared?.display==="string"?prepared.display:question;
   if(!question||busy)return;
@@ -368,13 +367,13 @@ function animateOrb(time){
 }
 requestAnimationFrame(animateOrb);
 
-let activeAccount=null;
+let activeAccount=undefined;
 window.TalgatSwitchAccount=id=>{
  if(id===activeAccount)return;activeAccount=id;conversationEpoch++;lastSpokenSource="";clearVoiceError();
  controller?.abort();controller=null;busy=false;$("send").disabled=false;stopVoiceSession();fileVersion++;attachments=[];renderAttachments();$("file-input").value="";$("question").value="";dialogStore=null;history=[];
  storageKey="talgat-ai-2-history-"+(id||"guest");prefsKey="talgat-ui-preferences-"+(id||"guest");
- if(id){try{if(window.TalgatDialogs){dialogStore=TalgatDialogs.createStore({storage:localStorage,userId:id});history=dialogStore.messages()}else{const data=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(data))history=data.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string")}}catch{$("status").textContent="Не удалось открыть личную историю. Проверьте свободное место на устройстве."}}
+ if(id){try{if(window.TalgatDialogs){dialogStore=TalgatDialogs.createStore({storage:localStorage,userId:id});history=dialogStore.messages()}else{const data=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(data))history=data.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string")}}catch{$("status").textContent="Не удалось открыть личную историю. Проверьте свободное место на устройстве."}}else{try{const data=JSON.parse(localStorage.getItem(storageKey)||"[]");if(Array.isArray(data))history=data.filter(m=>["user","assistant"].includes(m?.role)&&typeof m.content==="string").slice(-20)}catch{}}
  paintConversation();renderDialogList();
  prefs={theme:"dark",font:16,rate:.95,motion:"on",memory:"",language:"ru",engine:"device",listenPause:2,reasoningQuality:"quick"};
- if(id)try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}if(id&&heygenConfigured&&prefs.heygenVoiceVersion!==1){prefs.engine="heygen";prefs.rate=1;prefs.heygenVoiceVersion=1}applyPrefs();
+ try{Object.assign(prefs,JSON.parse(localStorage.getItem(prefsKey)||"{}"))}catch{}if(id&&heygenConfigured&&prefs.heygenVoiceVersion!==1){prefs.engine="heygen";prefs.rate=1;prefs.heygenVoiceVersion=1}applyPrefs();
 };
